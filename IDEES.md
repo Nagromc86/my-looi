@@ -1,0 +1,10 @@
+# Idées d'amélioration — My LOOI FR
+
+À faire une fois la version française validée sur le robot.
+
+1. **Appel visio WhatsApp** : « Louis, appelle Maman en visio », avec confirmation avant d'appeler.
+2. **Domotique** : ampoules et prises Xiaomi, purificateur Dyson, aspirateur Roborock. Piste 1 : les Home APIs de Google Home (gratuit, à tester avec ces marques). Piste 2 : Home Assistant (fiable, demande une petite machine allumée en permanence).
+3. **Surveillance** : photo de la pièce sur demande ou à heure fixe.
+4. **Clé de signature permanente** pour installer les nouvelles versions par-dessus sans perdre la mémoire de LOOI.
+
+Autres idées évoquées : rappels vocaux, accueil par reconnaissance de visage.
