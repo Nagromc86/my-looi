@@ -73,7 +73,7 @@ async function ensureManagedKwsKeywords(modelDir: string, keywordsFile: string):
   });
 }
 
-export type WhisperLanguageHint = "" | "ru" | "uk" | "en";
+export type WhisperLanguageHint = "" | "ru" | "uk" | "en" | "fr";
 
 export function getSherpaAsrConfig(languageOverride?: WhisperLanguageHint): AsrModelConfig {
   return {

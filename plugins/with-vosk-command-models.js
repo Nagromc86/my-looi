@@ -2,7 +2,7 @@ const { withDangerousMod } = require("expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
-const MODEL_DIRS = ["vosk-command-ru", "vosk-command-uk", "vosk-command-en"];
+const MODEL_DIRS = ["vosk-command-ru", "vosk-command-uk", "vosk-command-en", "vosk-command-fr"];
 
 module.exports = function withVoskCommandModels(config) {
   return withDangerousMod(config, [

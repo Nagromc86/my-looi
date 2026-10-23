@@ -46,13 +46,30 @@ export function parseRealtimePhysicalCommand(
   return command ? { kind: "explicit", command } : null;
 }
 
-function responseLanguage(): "ru" | "uk" | "en" {
+function responseLanguage(): "ru" | "uk" | "en" | "fr" {
   const language = useUserStore.getState().preferences.language;
-  return language === "uk" || language === "en" ? language : "ru";
+  return language === "uk" || language === "en" || language === "fr" ? language : "ru";
+}
+
+function frenchAcknowledgementFor(command: RealtimePhysicalCommand, ok: boolean): string {
+  const feminine = useUserStore.getState().preferences.speechGender === "feminine";
+  const e = feminine ? "e" : "";
+  if (!ok) return "Je n'ai pas réussi à le faire.";
+  if (command.kind === "emergency-stop") return `Arrêté${e}.`;
+  const value = command.command;
+  if (value.kind === "sleep") return "Bonne nuit.";
+  if (value.kind === "gesture") return value.count > 1 ? `J'ai hoché la tête ${value.count} fois.` : "J'ai hoché la tête.";
+  if (value.kind === "dance") return "Et voilà !";
+  if (value.kind === "turn") {
+    return value.degrees === 180 ? "Demi-tour fait." : value.direction === "left" ? "J'ai tourné à gauche." : "J'ai tourné à droite.";
+  }
+  if (value.direction === "stop") return `Arrêté${e}.`;
+  return value.direction === "forward" ? "J'ai avancé." : "J'ai reculé.";
 }
 
 function acknowledgementFor(command: RealtimePhysicalCommand, ok: boolean): string {
   const language = responseLanguage();
+  if (language === "fr") return frenchAcknowledgementFor(command, ok);
   if (!ok) {
     return language === "en" ? "I couldn't do that." : language === "uk" ? "Не вдалося це зробити." : "Не получилось это сделать.";
   }

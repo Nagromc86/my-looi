@@ -1,4 +1,5 @@
 import type { InterfaceLanguage } from "./ui-language";
+import { fr } from "./ui-strings-fr";
 
 type Params = Record<string, string | number>;
 
@@ -400,7 +401,7 @@ const en = {
 } as const;
 
 type UiStringKey = keyof typeof en;
-type TranslationTable = Record<UiStringKey, string>;
+export type TranslationTable = Record<UiStringKey, string>;
 
 const uk: TranslationTable = {
   "common.cancel": "Скасувати",
@@ -1196,7 +1197,7 @@ const ru: TranslationTable = {
   "voice.sage": "Голос OpenAI — сравни через Preview",
 };
 
-const tables: Record<InterfaceLanguage, TranslationTable> = { uk, en, ru };
+const tables: Record<InterfaceLanguage, TranslationTable> = { uk, en, ru, fr };
 
 export function uiText(language: InterfaceLanguage, key: UiStringKey, params?: Params): string {
   let text = tables[language][key] ?? en[key];

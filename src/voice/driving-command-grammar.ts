@@ -165,6 +165,60 @@ export function buildDrivingCommandGrammar(language: ListeningLanguage): Driving
     addNaturalVariants(commandByPhrase, { kind: "exit" }, [
       "закінчили", "все закінчили", "досить керувати", "звичайний режим", "поговорімо", "давай поговоримо", "повернись до розмови", "режим розмови",
     ], ["", "ну", "давай"], ["", "будь ласка"]);
+  } else if (language === "fr") {
+    // Avoid apostrophes and hyphens: the Vosk French vocabulary stores them as
+    // single tokens, and a phrase with an out-of-vocabulary word is ignored.
+    const prefixes = [
+      "allez", "bon", "ok", "okay", "maintenant", "et maintenant", "robot", "looi", "louis", "loulou",
+      "max", "allez robot", "allez louis", "hé robot", "hé louis", "allez hop",
+    ];
+    const suffixes = ["maintenant", "vite", "encore"];
+
+    addNaturalVariants(commandByPhrase, { kind: "stop" }, [
+      "stop", "arrête", "arrêtez", "arrête toi", "on arrête", "halte", "stoppe", "pause", "ça suffit", "suffit", "ne bouge plus", "bouge plus", "freine", "assez",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "move", direction: "forward" }, [
+      "avance", "avancez", "en avant", "tout droit", "va tout droit", "va en avant", "avance tout droit", "roule", "avance un peu", "va devant",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "move", direction: "backward" }, [
+      "recule", "reculez", "en arrière", "arrière", "marche arrière", "va en arrière", "recule un peu", "fais marche arrière",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "turn", direction: "left", degrees: 90 }, [
+      "à gauche", "gauche", "tourne à gauche", "va à gauche", "virage à gauche", "vers la gauche", "tourne vers la gauche",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "turn", direction: "right", degrees: 90 }, [
+      "à droite", "droite", "tourne à droite", "va à droite", "virage à droite", "vers la droite", "tourne vers la droite",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "turn", direction: "right", degrees: 180 }, [
+      "demi tour", "fais demi tour", "fais un demi tour", "retourne toi", "volte face", "tourne toi", "cent quatre vingts",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "gesture", gesture: "nod", count: 1 }, [
+      "hoche la tête", "hoche", "acquiesce", "fais oui", "fais oui de la tête", "dis oui de la tête",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "gesture", gesture: "nod", count: 2 }, [
+      "hoche la tête deux fois", "deux hochements", "fais oui deux fois",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "gesture", gesture: "nod", count: 3 }, [
+      "hoche la tête trois fois", "trois hochements", "fais oui trois fois",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "gesture", gesture: "happy_bob", count: 1 }, [
+      "bouge la tête", "remue la tête", "balance la tête",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "dance" }, [
+      "danse", "dansez", "danse pour moi", "fais une danse", "montre moi une danse", "fais ta danse", "on danse",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "sleep" }, [
+      "dors", "va dormir", "endors toi", "au lit", "fais dodo", "dodo",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "light", enabled: true }, [
+      "allume la lumière", "allume la lampe", "lumière",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "light", enabled: false }, [
+      "éteins la lumière", "éteins la lampe",
+    ], prefixes, suffixes);
+    addNaturalVariants(commandByPhrase, { kind: "exit" }, [
+      "terminé", "fini", "mode normal", "mode conversation", "on discute", "parlons", "on parle", "fin de la conduite",
+    ], ["", "bon", "allez"], ["", "maintenant"]);
   } else {
     const prefixes = [
       "go", "please", "okay", "ok", "well", "now", "now please", "and now", "now let's",

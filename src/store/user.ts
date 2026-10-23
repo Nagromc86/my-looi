@@ -81,7 +81,7 @@ export function normalizeFacePaletteId(value: unknown, legacySkin?: unknown): Fa
   return "cyan";
 }
 
-export type VoiceCommandLanguage = "ru" | "uk" | "en";
+export type VoiceCommandLanguage = "ru" | "uk" | "en" | "fr";
 export type CustomVoiceCommandAction =
   | "emergency_stop"
   | "forward"
@@ -115,7 +115,7 @@ function normalizePhraseList(value: unknown): CustomVoiceCommandPhrase[] {
     if (!item || typeof item !== "object") continue;
     const raw = item as Partial<CustomVoiceCommandPhrase>;
     const text = typeof raw.text === "string" ? raw.text.trim().slice(0, 80) : "";
-    const language: VoiceCommandLanguage = raw.language === "uk" || raw.language === "en" ? raw.language : "ru";
+    const language: VoiceCommandLanguage = raw.language === "uk" || raw.language === "en" || raw.language === "fr" ? raw.language : "ru";
     if (text.length < 2) continue;
     const key = `${language}:${text.toLocaleLowerCase()}`;
     if (seen.has(key)) continue;
@@ -260,9 +260,9 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   faceSkin: "classic",
   faceStyle: "classic",
   facePalette: "cyan",
-  robotName: "Луи",
-  robotAddressAliases: ["LOOI", "Луї", "Робот", "Robot"],
-  robotAddressRecognitionAliases: ["Луй", "Луни", "Луі", "Уи", "Уй"],
+  robotName: "LOOI",
+  robotAddressAliases: ["Louis", "Robot", "Луи"],
+  robotAddressRecognitionAliases: ["Louie", "Loui", "Lui", "Loulou"],
   customVoiceCommands: EMPTY_CUSTOM_VOICE_COMMANDS,
   conversationMode: "realtime_pcm",
 };
@@ -322,9 +322,9 @@ function loadPreferences(): UserPreferences {
       ),
       robotName: typeof (preferences as Partial<UserPreferences>).robotName === "string" && (preferences as Partial<UserPreferences>).robotName!.trim().length >= 2
         ? (preferences as Partial<UserPreferences>).robotName!.trim().slice(0, 40)
-        : "Луи",
-      robotAddressAliases: normalizeRobotAddressList((preferences as Partial<UserPreferences>).robotAddressAliases, ["LOOI", "Луї", "Робот", "Robot"]),
-      robotAddressRecognitionAliases: normalizeRobotAddressList((preferences as Partial<UserPreferences>).robotAddressRecognitionAliases, ["Луй", "Луни", "Луі", "Уи", "Уй"]),
+        : "LOOI",
+      robotAddressAliases: normalizeRobotAddressList((preferences as Partial<UserPreferences>).robotAddressAliases, ["Louis", "Robot", "Луи"]),
+      robotAddressRecognitionAliases: normalizeRobotAddressList((preferences as Partial<UserPreferences>).robotAddressRecognitionAliases, ["Louie", "Loui", "Lui", "Loulou"]),
       customVoiceCommands: normalizeCustomVoiceCommands((preferences as Partial<UserPreferences>).customVoiceCommands),
       conversationMode: (() => {
         const mode = (preferences as { conversationMode?: unknown }).conversationMode;

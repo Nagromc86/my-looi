@@ -886,7 +886,7 @@ function VoiceCommandsSettings() {
             <Text style={styles.help}>{action === "emergency_stop" ? t("settings.voiceCommandsEmergencyHelp") : t("settings.voiceCommandsAddressRequired", { name: preferences.robotName })}</Text>
             {phrases.map((phrase) => <View key={phrase.id} style={styles.phraseRow}><Text style={styles.value}>{phrase.text}</Text><Text style={styles.help}>{phrase.language.toUpperCase()}</Text><Pressable onPress={() => removePhrase(action, phrase.id)}><Text style={styles.deleteText}>×</Text></Pressable></View>)}
             <TextInput value={draft} onChangeText={setDraft} placeholder={t("settings.addPhrase")} placeholderTextColor={looiTheme.muted} style={styles.input} />
-            <ButtonRow>{(["uk", "en", "ru"] as VoiceCommandLanguage[]).map((language) => <SmallChoice key={language} selected={draftLanguage === language} label={language.toUpperCase()} onPress={() => setDraftLanguage(language)} />)}<Action label={t("settings.addPhraseButton")} onPress={() => addPhrase(action)} disabled={draft.trim().length < 3} /></ButtonRow>
+            <ButtonRow>{(["fr", "en", "uk", "ru"] as VoiceCommandLanguage[]).map((language) => <SmallChoice key={language} selected={draftLanguage === language} label={language.toUpperCase()} onPress={() => setDraftLanguage(language)} />)}<Action label={t("settings.addPhraseButton")} onPress={() => addPhrase(action)} disabled={draft.trim().length < 3} /></ButtonRow>
           </View> : null}
         </View>;
       })}

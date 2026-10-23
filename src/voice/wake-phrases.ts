@@ -43,7 +43,7 @@ const PHRASE_PATTERNS: Record<WakePhraseId, RegExp> = {
   // Include common short-utterance Whisper confusions observed with short noisy device utterances.
   ru: /(?:^|\s)(?:луи|луин|луй|лу\s+и|луе|лує|лоуи|руи|уи|уй|макс|max|робот|louie|loui|looi|louis|wooi|wui)(?=\s|$)/u,
   uk: /(?:^|\s)(?:луї|луїн|луі|луин|луй|лу\s+и|лує|луе|лоуї|луи|уи|уй|макс|max|робот|louie|loui|looi|louis|wooi|wui)(?=\s|$)/u,
-  en: /(?:^|\s)(?:looi|louie|loui|louis|wooi|wui|луи|луин|луй|лу\s+и|луї|луі|лує|луе|уи|уй|макс|max|робот)(?=\s|$)/u,
+  en: /(?:^|\s)(?:looi|louie|loui|louis|loulou|robot|wooi|wui|луи|луин|луй|лу\s+и|луї|луі|лує|луе|уи|уй|макс|max|робот)(?=\s|$)/u,
 };
 
 export function normalizeWakePhraseTranscript(transcript: string): string {

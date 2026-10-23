@@ -45,8 +45,8 @@ const update = realtime.buildRealtimeSessionUpdate({
 const tools = new Map(update.session.tools.map((tool) => [tool.name, tool]));
 assert.equal(tools.has("set_language_preferences"), true);
 const languageTool = tools.get("set_language_preferences");
-assert.deepEqual(languageTool.parameters.properties.response_language.enum, ["ru", "uk", "en"]);
-assert.deepEqual(languageTool.parameters.properties.listening_language.enum, ["ru", "uk", "en"]);
+assert.deepEqual(languageTool.parameters.properties.response_language.enum, ["ru", "uk", "en", "fr"]);
+assert.deepEqual(languageTool.parameters.properties.listening_language.enum, ["ru", "uk", "en", "fr"]);
 assert.deepEqual(languageTool.parameters.required, ["response_language"]);
 assert.match(languageTool.description, /Never use this for a one-off translation/i);
 

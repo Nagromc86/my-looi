@@ -37,7 +37,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 
 
-function shortLanguage(language: "ru" | "uk" | "en"): string {
+function shortLanguage(language: "ru" | "uk" | "en" | "fr"): string {
   const option = [...LISTENING_LANGUAGE_OPTIONS, ...RESPONSE_LANGUAGE_OPTIONS].find((item) => item.id === language);
   return option?.shortLabel ?? language.toUpperCase();
 }

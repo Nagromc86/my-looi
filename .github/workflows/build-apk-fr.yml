@@ -1,0 +1,116 @@
+name: Build APK (French)
+
+# Builds the French My LOOI APK and publishes it as a GitHub Release, so it can
+# be downloaded directly from a phone (Releases page → my-looi-fr.apk).
+#
+# Signing: if the repository secret LOOI_KEYSTORE_BASE64 exists, that permanent
+# key is used and each new APK installs over the previous one (memory kept).
+# Without it, a temporary key is generated for this build only: the APK works,
+# but to install a later build you must first uninstall the previous one.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-fr
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      MY_LOOI_RELEASE_KEY_ALIAS: my-looi
+      MY_LOOI_RELEASE_STORE_PASSWORD: ${{ secrets.LOOI_KEYSTORE_PASSWORD || 'my-looi-fr-keystore' }}
+      MY_LOOI_RELEASE_KEY_PASSWORD: ${{ secrets.LOOI_KEYSTORE_PASSWORD || 'my-looi-fr-keystore' }}
+      GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
+      EXPO_NO_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          corepack pnpm install --frozen-lockfile
+
+      - name: Check code (TypeScript + French tests)
+        run: |
+          corepack pnpm exec tsc --noEmit
+          node scripts/french-language.test.mjs
+          corepack pnpm run motion:safety-test
+          corepack pnpm run motion:cliff-test
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.LOOI_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/signing"
+          ks="$RUNNER_TEMP/signing/my-looi-release.keystore"
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$ks"
+            echo "Using the permanent signing key from LOOI_KEYSTORE_BASE64."
+          else
+            echo "::warning::No LOOI_KEYSTORE_BASE64 secret: using a temporary key. Uninstall the previous APK before installing this one."
+            keytool -genkeypair -v -keystore "$ks" -alias "$MY_LOOI_RELEASE_KEY_ALIAS" \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -storepass "$MY_LOOI_RELEASE_STORE_PASSWORD" -keypass "$MY_LOOI_RELEASE_KEY_PASSWORD" \
+              -dname "CN=My LOOI FR, O=Personal build"
+          fi
+          echo "MY_LOOI_RELEASE_KEYSTORE=$ks" >> "$GITHUB_ENV"
+
+      - name: Download offline voice-command models (incl. French)
+        run: bash scripts/download-vosk-command-models.sh
+
+      - name: Generate Android project
+        run: |
+          corepack pnpm exec expo prebuild --platform android --clean
+          node scripts/apply-android-release-signing.mjs android/app/build.gradle
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Name the APK
+        id: apk
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          mkdir -p output
+          cp android/app/build/outputs/apk/release/app-release.apk output/my-looi-fr.apk
+          ( cd output && sha256sum my-looi-fr.apk > my-looi-fr.apk.sha256 )
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: my-looi-fr-apk
+          path: output/my-looi-fr.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: fr-build-${{ github.run_number }}
+          name: My LOOI FR ${{ steps.apk.outputs.version }} (build ${{ github.run_number }})
+          body: |
+            Version française de My LOOI. Sur ton téléphone Android, télécharge **my-looi-fr.apk** ci-dessous puis ouvre-le pour l'installer.
+          files: |
+            output/my-looi-fr.apk
+            output/my-looi-fr.apk.sha256
+          make_latest: true

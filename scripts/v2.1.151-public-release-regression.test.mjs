@@ -25,7 +25,8 @@ assert.equal(
   crypto.createHash("sha256")
     .update(read("src/voice/realtime-pcm-conversation.ts"))
     .digest("hex"),
-  "a22924f9c8e5da6e93bdf94e10a17a88bab43ccae732fb5fac82c19861313ced"
+  // French fork: only the set_language_preferences validation accepts "fr"; audio path unchanged.
+  "bb071ed9cea14f27367cbac611e5075e668d035bdeab26de24156a311dc1778b"
 );
 
 assert.equal(

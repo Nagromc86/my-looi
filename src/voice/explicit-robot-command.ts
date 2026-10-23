@@ -16,10 +16,10 @@ export type ExplicitRobotCommandConfig = {
 
 // Narrow STT recovery aliases are accepted only in the address position and
 // still require the remainder to parse as a deterministic physical command.
-const BUILTIN_ADDRESS_ALIASES = ["луи", "луй", "луни", "луї", "луі", "лу и", "looi", "макс", "max", "робот", "robot", "уи", "уй", "рога"];
+const BUILTIN_ADDRESS_ALIASES = ["луи", "луй", "луни", "луї", "луі", "лу и", "looi", "макс", "max", "робот", "robot", "уи", "уй", "рога", "louis", "louie", "loui", "loulou"];
 
 function normalizeMatchText(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase().replace(/ё/g, "е").replace(/[’'`]/g, "").replace(/[^a-zа-яіїєґ0-9\s]/giu, " ").replace(/\s+/g, " ").trim();
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/ё/g, "е").replace(/[’'`]/g, "").replace(/[^a-zà-ÿœæа-яіїєґ0-9\s]/giu, " ").replace(/\s+/g, " ").trim();
 }
 
 function configuredAddresses(config?: ExplicitRobotCommandConfig): string[] {
@@ -45,16 +45,19 @@ export function getExplicitRobotAddressedCommand(text: string, config?: Explicit
   return splitAddressedCommand(text, config)?.command ?? null;
 }
 
-const MOVE_VERB_RE = /(?:^|\s)(?:едь|езжай|поедь|проедь|двигайся|двинься|повернись|поверни|їдь|поїдь|рухайся|повернись|поверни|go|drive|move|turn)(?=$|[\s.,!?])/iu;
+const MOVE_VERB_RE = /(?:^|\s)(?:едь|езжай|поедь|проедь|двигайся|двинься|повернись|поверни|їдь|поїдь|рухайся|повернись|поверни|go|drive|move|turn|va|vas|roule|tourne|bouge|avance|recule|pars)(?=$|[\s.,!?])/iu;
 
 function isBareDirectionCommand(command: string, variants: string): boolean {
-  return new RegExp(`^(?:${variants})(?:\\s+(?:пожалуйста|немного|чуть(?:-чуть)?))?[.!?]*$`, "i").test(command.trim());
+  return new RegExp(`^(?:${variants})(?:\\s+(?:пожалуйста|немного|чуть(?:-чуть)?|un\\s+peu|sil\\s+te\\s+pla[iî]t|stp|maintenant))?[.!?]*$`, "i").test(command.trim());
 }
 
 /** Standalone built-in STOP is an absolute safety keyword and never requires an address. */
 export function containsEmergencyStopWord(text: string, config?: ExplicitRobotCommandConfig): boolean {
   const normalized = normalizeMatchText(text);
   if (/(?:^|\s)(?:стоп|stop)(?=$|\s)/iu.test(normalized)) return true;
+  // French: only a short standalone order, so ordinary sentences such as
+  // "il n'arrête pas de pleuvoir" never trigger an emergency stop.
+  if (/^(?:(?:[a-zà-ÿ]+\s+)?(?:arr[eê]te(?:\s+toi)?|arr[eê]tez|halte|stoppe|ne\s+bouge\s+plus)(?:\s+(?:tout\s+de\s+suite|maintenant))?)$/iu.test(normalized)) return true;
   const listeningLanguage = config?.listeningLanguage ?? "ru";
   return (config?.customVoiceCommands?.emergency_stop ?? []).some((phrase) => phrase.language === listeningLanguage && phraseMatches(normalized, phrase));
 }
@@ -109,7 +112,7 @@ function normalizeKnownGluedRobotAddress(text: string): string {
   // (for example "Луикивни три раза"). Only split known physical-command stems so
   // arbitrary conversational words beginning with "луи" are not broadened.
   return text.trim().replace(
-    /^(луи|луй|луни|луї|луі|макс|max|робот|robot|уи|уй|рога)(?=(?:кивни|кивай|стоп|стой|спи|засни|потанцуй|потанцюй|танцуй|танцюй|dance|впер[её]д|назад|влево|вправо|налево|направо|развернись))/iu,
+    /^(луи|луй|луни|луї|луі|макс|max|робот|robot|уи|уй|рога)(?=(?:кивни|кивай|стоп|стой|спи|засни|потанцуй|потанцюй|танцуй|танцюй|dance|впер[её]д|назад|влево|вправо|налево|направо|развернись|avance|recule|danse|dors|hoche))/iu,
     "$1 "
   );
 }
@@ -120,7 +123,7 @@ function stripNaturalCommandLeadIns(command: string): string {
   // Address-at-start remains mandatory. These fillers are accepted only AFTER
   // a valid "Луи/Робот" address so natural forms like "Робот, давай назад"
   // remain deterministic physical commands rather than broad conversation.
-  const leadIn = /^(?:(?:ну\s+)?давай(?:-ка)?|ну-ка|теперь|а\s+теперь|ладно|хорошо|окей|пожалуйста)\s+/iu;
+  const leadIn = /^(?:(?:ну\s+)?давай(?:-ка)?|ну-ка|теперь|а\s+теперь|ладно|хорошо|окей|пожалуйста|allez|vas\s+y|bon|ok|okay|daccord|maintenant|sil\s+te\s+pla[iî]t|stp|est\s+ce\s+que\s+tu\s+peux|tu\s+peux|peux\s+tu)\s+/iu;
   for (let i = 0; i < 3; i += 1) {
     const next = value.replace(leadIn, "");
     if (next === value) break;
@@ -137,6 +140,19 @@ export function parseExplicitRobotCommand(text: string, config?: ExplicitRobotCo
   const customAction = customActionFor(command, config);
   if (customAction) return commandFromCustomAction(customAction, command);
 
+  // French: these verbs are also common nouns/questions ("tu dors ?", "la
+  // danse"), so they only count as orders when they start the command.
+  const frTail = "(?:\\s+(?:un\\s+peu|sil\\s+te\\s+pla[iî]t|stp|maintenant|pour\\s+moi))?$";
+  if (new RegExp(`^(?:dors|va\\s+dormir|endors\\s+toi|fais\\s+dodo|au\\s+lit)${frTail}`, "iu").test(command)) {
+    return { kind: "sleep" };
+  }
+  if (new RegExp(`^(?:hoche(?:\\s+la\\s+t[eê]te)?|acquiesce|fais\\s+oui(?:\\s+de\\s+la\\s+t[eê]te)?)(?:\\s+(?:[1-5]|une|deux|trois|quatre|cinq)\\s+fois)?${frTail}`, "iu").test(command)) {
+    return { kind: "gesture", gesture: "nod", count: parseRequestedNodCount(command) };
+  }
+  if (new RegExp(`^(?:danse|dansez|fais\\s+(?:une|ta)\\s+danse|montre\\s+moi\\s+une\\s+danse)${frTail}`, "iu").test(command)) {
+    return { kind: "dance" };
+  }
+
   if (/(?:^|\s)(?:спи|спать|засни|засыпай|иди\s+спать|ложись\s+спать|засинай|спати|іди\s+спати|sleep|go\s+to\s+sleep|fall\s+asleep)(?=$|[\s.,!?])/iu.test(command)) {
     return { kind: "sleep" };
   }
@@ -149,13 +165,13 @@ export function parseExplicitRobotCommand(text: string, config?: ExplicitRobotCo
     return { kind: "dance" };
   }
 
-  if (/(?:^|\s)(?:стоп|стой|остановись|останови\s+движение|стій|зупинись|зупини|stop|halt)(?=$|[\s.,!?])/iu.test(command)) {
+  if (/(?:^|\s)(?:стоп|стой|остановись|останови\s+движение|стій|зупинись|зупини|stop|halt|arr[eê]te|arr[eê]te\s+toi|arr[eê]tez|halte|stoppe)(?=$|[\s.,!?])/iu.test(command)) {
     return { kind: "move", direction: "stop" };
   }
 
   if (
-    /(?:^|\s)(?:развернись|разверни|повернись\s+обратно|поверни\s+обратно|розвернись|розверни|повернись\s+назад|turn\s+around|make\s+a\s+u\s*turn|u\s*turn)(?=$|[\s.,!?])/iu.test(command) ||
-    /(?:^|\s)(?:180|сто\s+восемьдесят|сто\s+вісімдесят|one\s+eighty)\s*(?:градус(?:ов|а)?|градус(?:ів|и)?|degrees?|°)?(?=$|[\s.,!?])/iu.test(command)
+    /(?:^|\s)(?:развернись|разверни|повернись\s+обратно|поверни\s+обратно|розвернись|розверни|повернись\s+назад|turn\s+around|make\s+a\s+u\s*turn|u\s*turn|demi\s+tour|retourne\s+toi|volte\s+face)(?=$|[\s.,!?])/iu.test(command) ||
+    /(?:^|\s)(?:180|сто\s+восемьдесят|сто\s+вісімдесят|one\s+eighty|cent\s+quatre\s+vingts?)\s*(?:градус(?:ов|а)?|градус(?:ів|и)?|degrees?|degr[eé]s|°)?(?=$|[\s.,!?])/iu.test(command)
   ) {
     // Clockwise/right is the deterministic default for a 180° turn.
     return { kind: "turn", direction: "right", degrees: 180 };
@@ -164,26 +180,26 @@ export function parseExplicitRobotCommand(text: string, config?: ExplicitRobotCo
   const hasMoveVerb = MOVE_VERB_RE.test(command);
 
   if (
-    (hasMoveVerb && /(?:^|\s)(?:впер[её]д|вперед|прямо|forward|ahead|straight)(?=$|[\s.,!?])/iu.test(command)) ||
-    isBareDirectionCommand(command, "впер[её]д|вперед|прямо|forward|ahead|straight")
+    (hasMoveVerb && /(?:^|\s)(?:впер[её]д|вперед|прямо|forward|ahead|straight|en\s+avant|tout\s+droit|devant)(?=$|[\s.,!?])/iu.test(command)) ||
+    isBareDirectionCommand(command, "впер[её]д|вперед|прямо|forward|ahead|straight|avance|avancez|en\\s+avant|tout\\s+droit|avance\\s+tout\\s+droit|va\\s+tout\\s+droit|roule")
   ) {
     return { kind: "move", direction: "forward" };
   }
   if (
-    (hasMoveVerb && /(?:^|\s)(?:назад|обратно|back|backward|reverse)(?=$|[\s.,!?])/iu.test(command)) ||
-    isBareDirectionCommand(command, "назад|обратно|back|backward|reverse")
+    (hasMoveVerb && /(?:^|\s)(?:назад|обратно|back|backward|reverse|en\s+arri[eè]re|arri[eè]re)(?=$|[\s.,!?])/iu.test(command)) ||
+    isBareDirectionCommand(command, "назад|обратно|back|backward|reverse|recule|reculez|en\\s+arri[eè]re|marche\\s+arri[eè]re")
   ) {
     return { kind: "move", direction: "backward" };
   }
   if (
-    (hasMoveVerb && /(?:^|\s)(?:влево|налево|левее|вліво|наліво|ліворуч|left)(?=$|[\s.,!?])/iu.test(command)) ||
-    isBareDirectionCommand(command, "влево|налево|левее|вліво|наліво|ліворуч|left")
+    (hasMoveVerb && /(?:^|\s)(?:влево|налево|левее|вліво|наліво|ліворуч|left|gauche)(?=$|[\s.,!?])/iu.test(command)) ||
+    isBareDirectionCommand(command, "влево|налево|левее|вліво|наліво|ліворуч|left|[aà]\\s+gauche|gauche|tourne\\s+[aà]\\s+gauche")
   ) {
     return { kind: "turn", direction: "left", degrees: 90 };
   }
   if (
-    (hasMoveVerb && /(?:^|\s)(?:вправо|направо|правее|праворуч|right)(?=$|[\s.,!?])/iu.test(command)) ||
-    isBareDirectionCommand(command, "вправо|направо|правее|праворуч|right")
+    (hasMoveVerb && /(?:^|\s)(?:вправо|направо|правее|праворуч|right|droite)(?=$|[\s.,!?])/iu.test(command)) ||
+    isBareDirectionCommand(command, "вправо|направо|правее|праворуч|right|[aà]\\s+droite|droite|tourne\\s+[aà]\\s+droite")
   ) {
     return { kind: "turn", direction: "right", degrees: 90 };
   }
@@ -192,10 +208,14 @@ export function parseExplicitRobotCommand(text: string, config?: ExplicitRobotCo
 }
 
 function parseRequestedNodCount(command: string): number {
-  const digit = /(?:^|\s)([1-5])\s*(?:раз(?:а)?|разок)?(?=$|[\s.,!?])/i.exec(command);
+  const digit = /(?:^|\s)([1-5])\s*(?:раз(?:а)?|разок|fois)?(?=$|[\s.,!?])/i.exec(command);
   if (digit) return Number(digit[1]);
 
   const wordCounts: Array<[RegExp, number]> = [
+    [/(?:^|\s)cinq\s+fois(?=\s|$)/i, 5],
+    [/(?:^|\s)quatre\s+fois(?=\s|$)/i, 4],
+    [/(?:^|\s)trois\s+fois(?=\s|$)/i, 3],
+    [/(?:^|\s)deux\s+fois(?=\s|$)/i, 2],
     [/(?:^|\s)(?:пять|пятикратно)(?=\s|$|[.,!?])/i, 5],
     [/(?:^|\s)(?:четыре|четырежды)(?=\s|$|[.,!?])/i, 4],
     [/(?:^|\s)(?:три|трижды)(?=\s|$|[.,!?])/i, 3],

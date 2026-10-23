@@ -1286,7 +1286,9 @@ export class VoicePerceiver extends BasePerceiver {
         const stopStartedAt = Date.now();
         await stopLooiMotion("voice-emergency-transcript");
         const responseLanguage = useUserStore.getState().preferences.language;
-        const acknowledgement = responseLanguage === "en"
+        const acknowledgement = responseLanguage === "fr"
+          ? "Arrêt."
+          : responseLanguage === "en"
           ? "Stopped."
           : responseLanguage === "uk" ? "Зупинився." : "Остановился.";
         conversationStore.addMessage({ role: "assistant", content: acknowledgement });

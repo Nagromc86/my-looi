@@ -8,7 +8,7 @@ import type { WhisperLanguageHint } from "./sherpa-adapter";
 import { useUserStore } from "../store/user";
 
 export type WakePhraseRecognitionAttempt = {
-  language: "auto" | "ru" | "uk" | "en";
+  language: "auto" | "ru" | "uk" | "en" | "fr";
   transcript: string;
   matched: boolean;
 };

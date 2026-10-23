@@ -14,21 +14,25 @@ const VOICE_MESSAGES: Record<
     ru: "Я не расслышал. Подойди немного ближе и повтори.",
     uk: "Я не розчув. Підійди трохи ближче й повтори.",
     en: "I didn't catch that. Come a little closer and try again.",
+    fr: "Je n'ai pas bien entendu. Approche-toi un peu et répète.",
   },
   "owner-rejected": {
     ru: "Голос не прошёл проверку. Запиши ещё один образец голоса в настройках или повтори команду чётче.",
     uk: "Голос не пройшов перевірку. Запиши ще один зразок голосу в налаштуваннях або повтори команду чіткіше.",
     en: "Voice verification failed. Add another voice sample in settings or repeat the command more clearly.",
+    fr: "La vérification de la voix a échoué. Ajoute un autre échantillon de voix dans les réglages ou répète la commande plus clairement.",
   },
   "command-missing": {
     ru: "После имени LOOI скажи команду одним предложением.",
     uk: "Після імені LOOI скажи команду одним реченням.",
     en: "After saying LOOI, say your command in one sentence.",
+    fr: "Après avoir dit LOOI, donne ta commande en une phrase.",
   },
   "processing-failed": {
     ru: "Не получилось обработать запрос. Попробуй ещё раз.",
     uk: "Не вдалося обробити запит. Спробуй ще раз.",
     en: "I couldn't process that request. Please try again.",
+    fr: "Je n'ai pas pu traiter la demande. Réessaie.",
   },
 };
 
