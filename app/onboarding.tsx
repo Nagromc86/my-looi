@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from "expo-audio";
@@ -12,6 +12,14 @@ import {
   saveOpenAiApiKey,
   validateOpenAiApiKey,
 } from "@/src/openai/openai-api-key";
+import {
+  checkGeminiApiKey,
+  clearGeminiApiKey,
+  GEMINI_API_KEY_URL,
+  saveGeminiApiKey,
+  validateGeminiApiKey,
+} from "@/src/gemini/gemini-api-key";
+import type { AiProvider } from "@/src/store/user";
 import {
   computeSetupReadiness,
   type SetupReadiness,
@@ -75,6 +83,15 @@ export default function OnboardingScreen() {
   const { language: interfaceLanguageForText, t } = useUiText();
   const interfaceLanguage = useUserStore((state) => state.preferences.interfaceLanguage);
   const updatePreferences = useUserStore((state) => state.updatePreferences);
+  const aiProvider = useUserStore((state) => state.preferences.aiProvider);
+
+  const selectAiProvider = useCallback((provider: AiProvider) => {
+    updatePreferences({ aiProvider: provider });
+    setOpenAiError(null);
+    setOpenAiKeyInput("");
+    // Re-check the key for the newly selected provider without leaving this step.
+    void computeSetupReadiness().then(setReadiness).catch(() => undefined);
+  }, [updatePreferences]);
 
   const refreshReadiness = useCallback(async () => {
     setLoadingReadiness(true);
@@ -109,8 +126,21 @@ export default function OnboardingScreen() {
     setOpenAiBusy(true);
     setOpenAiError(null);
     try {
-      const key = validateOpenAiApiKey(openAiKeyInput);
-      await saveOpenAiApiKey(key);
+      if (useUserStore.getState().preferences.aiProvider === "gemini") {
+        await saveGeminiApiKey(validateGeminiApiKey(openAiKeyInput));
+        // Ask Google which Live voice model this key can use. A network error
+        // is not blocking; a rejected key is.
+        const check = await checkGeminiApiKey().catch(() => null);
+        if (check && !check.ok && check.reason === "invalid_key") {
+          await clearGeminiApiKey();
+          throw new Error(t("ai.geminiKeyInvalid"));
+        }
+        if (check?.ok && check.liveModels.length) {
+          useUserStore.getState().updatePreferences({ geminiModelId: check.recommendedModel });
+        }
+      } else {
+        await saveOpenAiApiKey(validateOpenAiApiKey(openAiKeyInput));
+      }
       setOpenAiKeyInput("");
       await refreshReadiness();
       goToStep("models");
@@ -122,7 +152,8 @@ export default function OnboardingScreen() {
   }, [goToStep, openAiBusy, openAiKeyInput, refreshReadiness, t]);
 
   const replaceOpenAiKey = useCallback(async () => {
-    await clearOpenAiApiKey();
+    if (useUserStore.getState().preferences.aiProvider === "gemini") await clearGeminiApiKey();
+    else await clearOpenAiApiKey();
     await refreshReadiness();
     setOpenAiError(null);
   }, [refreshReadiness]);
@@ -213,7 +244,7 @@ export default function OnboardingScreen() {
             const complete = isStepComplete(step.id, readiness);
             return (
               <Pressable key={step.id} onPress={() => goToStep(step.id)} style={[styles.step, active && styles.stepActive]}>
-                <Text style={[styles.stepText, active && styles.stepTextActive]}>{complete ? "✓ " : ""}{step.labelKey ? t(step.labelKey) : "OpenAI"}</Text>
+                <Text style={[styles.stepText, active && styles.stepTextActive]}>{complete ? "✓ " : ""}{step.labelKey ? t(step.labelKey) : t("ai.step")}</Text>
               </Pressable>
             );
           })}
@@ -223,13 +254,24 @@ export default function OnboardingScreen() {
           {loadingReadiness && !readiness ? <ActivityIndicator /> : null}
 
           {activeStep === "openai" ? (
-            <Section title="OpenAI Realtime">
-              <Text style={styles.help}>{t("onboarding.apiHelp")}</Text>
+            <Section title={t("ai.title")}>
+              <Text style={styles.help}>{t("ai.help")}</Text>
+              <View style={styles.actions}>
+                {(["gemini", "openai"] as AiProvider[]).map((provider) => aiProvider === provider
+                  ? <PrimaryButton key={provider} label={`✓ ${t(provider === "gemini" ? "ai.gemini" : "ai.openai")}`} onPress={() => undefined} />
+                  : <SecondaryButton key={provider} label={t(provider === "gemini" ? "ai.gemini" : "ai.openai")} onPress={() => selectAiProvider(provider)} />)}
+              </View>
+              <Text style={styles.help}>{aiProvider === "gemini" ? t("ai.geminiHelp") : t("onboarding.apiHelp")}</Text>
+              {aiProvider === "gemini" ? (
+                <View style={styles.actions}>
+                  <SecondaryButton label={t("ai.getGeminiKey")} onPress={() => void Linking.openURL(GEMINI_API_KEY_URL)} />
+                </View>
+              ) : null}
               <StatusRow label={t("onboarding.key")} ready={Boolean(readiness?.openAiKeyConfigured)} readyText={t("onboarding.keySaved")} pendingText={t("onboarding.keyNeeded")} />
               <TextInput
                 value={openAiKeyInput}
                 onChangeText={setOpenAiKeyInput}
-                placeholder={readiness?.openAiKeyConfigured ? t("onboarding.newKey") : "OpenAI API key"}
+                placeholder={readiness?.openAiKeyConfigured ? t("onboarding.newKey") : aiProvider === "gemini" ? t("ai.geminiKeyPlaceholder") : "OpenAI API key"}
                 placeholderTextColor={looiTheme.muted}
                 secureTextEntry
                 autoCapitalize="none"
@@ -280,7 +322,7 @@ export default function OnboardingScreen() {
 
           {activeStep === "done" ? (
             <Section title={t("onboarding.doneTitle")}>
-              <StatusRow label="OpenAI" ready={Boolean(readiness?.openAiKeyConfigured)} readyText={t("settings.summary.keySaved")} pendingText={t("onboarding.keyNotConfigured")} />
+              <StatusRow label={aiProvider === "gemini" ? "Gemini" : "OpenAI"} ready={Boolean(readiness?.openAiKeyConfigured)} readyText={t("settings.summary.keySaved")} pendingText={t("onboarding.keyNotConfigured")} />
               <StatusRow label={t("onboarding.step.models")} ready={Boolean(readiness?.modelsReady)} readyText={t("onboarding.modelsReady")} pendingText={t("onboarding.modelsNotReady")} />
               <StatusRow label={t("onboarding.microphone")} ready={Boolean(readiness?.microphoneReady)} readyText={t("onboarding.micAllowed")} pendingText={t("onboarding.noAccess")} />
               <StatusRow label={t("settings.summary.robot")} ready={Boolean(readiness?.robotReady)} readyText={t("common.ready")} pendingText={t("onboarding.optional")} neutral />

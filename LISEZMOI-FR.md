@@ -9,6 +9,22 @@ Fork de [razor79/my-looi](https://github.com/razor79/my-looi) (licence MIT) avec
 - **Nom par défaut : « LOOI »**, et il répond aussi à « Louis » et « Robot ».
 - **Commandes vocales en français**, y compris un modèle de reconnaissance hors ligne français pour le mode conduite.
 
+## Choix de l'IA : Gemini (gratuit) ou OpenAI (payant)
+
+Par défaut, LOOI discute avec **Gemini Live** de Google, qui a un niveau gratuit.
+
+1. Va sur **https://aistudio.google.com/apikey** (connecte-toi avec ton compte Google).
+2. Appuie sur **Create API key** et copie la clé (elle commence par `AIza`).
+3. Dans l'app, à la première configuration (ou Réglages → Moteur d'IA), colle-la et enregistre.
+
+Bon à savoir :
+- Le niveau gratuit a des limites d'utilisation par minute et par jour ; si elles sont atteintes, LOOI le signale et il suffit de réessayer plus tard.
+- Sur le niveau gratuit, Google peut utiliser les conversations pour améliorer ses produits.
+- Les longues conversations sont reprises automatiquement quand Google renouvelle la connexion (toutes les ~10 minutes).
+- La voix se choisit dans Réglages → Voix de LOOI (Puck par défaut).
+
+OpenAI reste disponible dans Réglages → Moteur d'IA (payant, avec ta clé OpenAI).
+
 ## Commandes vocales
 
 En conversation, commence par le nom du robot : « Louis, avance ».

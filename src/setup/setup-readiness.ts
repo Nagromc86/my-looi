@@ -3,6 +3,8 @@ import { getRecordingPermissionsAsync } from "expo-audio";
 import { getLooiRobotRuntimeState } from "@/src/device-tools/looi-robot";
 import { getSavedLooiRobot } from "@/src/device-tools/looi-robot-autoconnect";
 import { hasOpenAiApiKey } from "@/src/openai/openai-api-key";
+import { hasGeminiApiKey } from "@/src/gemini/gemini-api-key";
+import { useUserStore } from "@/src/store/user";
 import { checkAllSherpaModelReadiness, type SherpaModelCheck } from "@/src/voice/sherpa-models";
 import { getSetupStorageState, type SetupSkipState } from "./setup-storage";
 
@@ -34,7 +36,8 @@ export function areSherpaModelsReady(status: SetupModelReadiness): boolean {
 export async function computeSetupReadiness(): Promise<SetupReadiness> {
   const storageState = getSetupStorageState();
   const [openAiKeyConfigured, modelResult, microphoneReady, robotReady] = await Promise.all([
-    hasOpenAiApiKey(),
+    // French fork: "openAiKeyConfigured" means "the selected AI provider has a key".
+    useUserStore.getState().preferences.aiProvider === "openai" ? hasOpenAiApiKey() : hasGeminiApiKey(),
     checkAllSherpaModelReadiness().catch((error) => {
       console.warn("[Setup] Failed to check Sherpa model readiness:", error);
       return null;

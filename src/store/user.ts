@@ -25,6 +25,8 @@ import {
   normalizeInterfaceLanguage,
   type InterfaceLanguage,
 } from "../i18n/ui-language";
+import { DEFAULT_GEMINI_LIVE_MODEL } from "../gemini/gemini-live-socket";
+import { DEFAULT_GEMINI_VOICE_ID, normalizeGeminiVoiceId } from "../gemini/gemini-voices";
 
 export type VoiceState =
   | "sleeping"
@@ -206,7 +208,15 @@ export type UserPreferences = {
   customVoiceCommands: CustomVoiceCommandMap;
   /** Selectable conversation transport. Older persisted values normalize to Realtime PCM. */
   conversationMode: ConversationMode;
+  /** French fork: which AI LOOI converses with. Gemini has a free tier. */
+  aiProvider: AiProvider;
+  /** French fork: Gemini Live prebuilt voice. */
+  geminiVoiceId: string;
+  /** French fork: Gemini Live model, chosen from the key's model list. */
+  geminiModelId: string;
 };
+
+export type AiProvider = "gemini" | "openai";
 
 interface UserState {
   /** User profile ID */
@@ -265,6 +275,9 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   robotAddressRecognitionAliases: ["Louie", "Loui", "Lui", "Loulou"],
   customVoiceCommands: EMPTY_CUSTOM_VOICE_COMMANDS,
   conversationMode: "realtime_pcm",
+  aiProvider: "gemini",
+  geminiVoiceId: DEFAULT_GEMINI_VOICE_ID,
+  geminiModelId: DEFAULT_GEMINI_LIVE_MODEL,
 };
 
 function loadPreferences(): UserPreferences {
@@ -330,8 +343,16 @@ function loadPreferences(): UserPreferences {
         const mode = (preferences as { conversationMode?: unknown }).conversationMode;
         return mode === "realtime" ? "realtime" : "realtime_pcm";
       })(),
+      aiProvider: (preferences as Partial<UserPreferences>).aiProvider === "openai" ? "openai" : "gemini",
+      geminiVoiceId: normalizeGeminiVoiceId((preferences as Partial<UserPreferences>).geminiVoiceId),
+      geminiModelId: typeof (preferences as Partial<UserPreferences>).geminiModelId === "string" && /^[a-z0-9.\-]{3,80}$/.test((preferences as Partial<UserPreferences>).geminiModelId!)
+        ? (preferences as Partial<UserPreferences>).geminiModelId!
+        : DEFAULT_GEMINI_LIVE_MODEL,
     };
     if (
+      (preferences as Partial<UserPreferences>).aiProvider !== normalized.aiProvider ||
+      (preferences as Partial<UserPreferences>).geminiVoiceId !== normalized.geminiVoiceId ||
+      (preferences as Partial<UserPreferences>).geminiModelId !== normalized.geminiModelId ||
       (preferences as Partial<UserPreferences>).interfaceLanguage !== normalized.interfaceLanguage ||
       (preferences as Partial<UserPreferences>).listeningLanguage !== normalized.listeningLanguage ||
       (preferences as Partial<UserPreferences>).realtimeModelId !== normalized.realtimeModelId ||

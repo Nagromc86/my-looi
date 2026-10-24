@@ -7,4 +7,6 @@
 3. **Surveillance à distance** : LOOI envoie une photo de la pièce par WhatsApp quand tu n'es pas là, sur demande ou à heure fixe. Contrainte : WhatsApp ne permet pas d'envoyer un message sans toucher l'écran ; options possibles : WhatsApp Business (numéro dédié), service d'accessibilité Android, ou autre messagerie avec bot (Telegram).
 4. ~~**Clé de signature permanente**~~ : fait (secret `LOOI_KEYSTORE_PASSWORD`).
 
+5. ~~**IA gratuite**~~ : fait (Gemini Live, niveau gratuit).
+
 Autres idées évoquées : rappels vocaux, accueil par reconnaissance de visage.

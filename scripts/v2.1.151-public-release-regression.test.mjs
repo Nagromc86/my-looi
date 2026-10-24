@@ -25,8 +25,8 @@ assert.equal(
   crypto.createHash("sha256")
     .update(read("src/voice/realtime-pcm-conversation.ts"))
     .digest("hex"),
-  // French fork: only the set_language_preferences validation accepts "fr"; audio path unchanged.
-  "bb071ed9cea14f27367cbac611e5075e668d035bdeab26de24156a311dc1778b"
+  // French fork: language tool + Gemini provider branch; OpenAI audio path unchanged.
+  "e16a81b016f4fb7ea22388c712b00fed94439030ca90115873df30a24e71a01b"
 );
 
 assert.equal(

@@ -398,6 +398,23 @@ const en = {
   "voice.ballad": "OpenAI voice — compare it with Preview",
   "voice.echo": "OpenAI voice — compare it with Preview",
   "voice.sage": "OpenAI voice — compare it with Preview",
+
+  "ai.step": "AI",
+  "ai.title": "AI engine",
+  "ai.help": "Choose the AI LOOI talks with. Gemini has a free tier; OpenAI is paid per minute.",
+  "ai.gemini": "Gemini · free",
+  "ai.openai": "OpenAI · paid",
+  "ai.geminiHelp": "Create a free key at aistudio.google.com (Get API key), then paste it here. It is stored only on this phone. On the free tier, Google may use conversations to improve its products.",
+  "ai.geminiKeyPlaceholder": "Gemini API key",
+  "ai.getGeminiKey": "Get a free key",
+  "ai.checkGeminiKey": "Check key",
+  "ai.geminiKeyOk": "✓ Key works · model: {model}",
+  "ai.geminiKeyNoLive": "Key works, but no Live voice model is available for it.",
+  "ai.geminiKeyInvalid": "Key rejected by Google",
+  "ai.geminiKeyNetwork": "Could not reach Google: {message}",
+  "ai.geminiVoice": "Gemini voice",
+  "ai.geminiVoiceHelp": "Applied from the next conversation.",
+  "ai.geminiModel": "Model: {model}",
 } as const;
 
 type UiStringKey = keyof typeof en;
@@ -798,6 +815,23 @@ const uk: TranslationTable = {
   "voice.ballad": "Голос OpenAI — порівняй через Preview",
   "voice.echo": "Голос OpenAI — порівняй через Preview",
   "voice.sage": "Голос OpenAI — порівняй через Preview",
+  // French fork: English fallback for AI provider settings.
+  "ai.step": "AI",
+  "ai.title": "AI engine",
+  "ai.help": "Choose the AI LOOI talks with. Gemini has a free tier; OpenAI is paid per minute.",
+  "ai.gemini": "Gemini · free",
+  "ai.openai": "OpenAI · paid",
+  "ai.geminiHelp": "Create a free key at aistudio.google.com (Get API key), then paste it here. It is stored only on this phone. On the free tier, Google may use conversations to improve its products.",
+  "ai.geminiKeyPlaceholder": "Gemini API key",
+  "ai.getGeminiKey": "Get a free key",
+  "ai.checkGeminiKey": "Check key",
+  "ai.geminiKeyOk": "✓ Key works · model: {model}",
+  "ai.geminiKeyNoLive": "Key works, but no Live voice model is available for it.",
+  "ai.geminiKeyInvalid": "Key rejected by Google",
+  "ai.geminiKeyNetwork": "Could not reach Google: {message}",
+  "ai.geminiVoice": "Gemini voice",
+  "ai.geminiVoiceHelp": "Applied from the next conversation.",
+  "ai.geminiModel": "Model: {model}",
 };
 
 const ru: TranslationTable = {
@@ -1195,6 +1229,23 @@ const ru: TranslationTable = {
   "voice.ballad": "Голос OpenAI — сравни через Preview",
   "voice.echo": "Голос OpenAI — сравни через Preview",
   "voice.sage": "Голос OpenAI — сравни через Preview",
+  // French fork: English fallback for AI provider settings.
+  "ai.step": "AI",
+  "ai.title": "AI engine",
+  "ai.help": "Choose the AI LOOI talks with. Gemini has a free tier; OpenAI is paid per minute.",
+  "ai.gemini": "Gemini · free",
+  "ai.openai": "OpenAI · paid",
+  "ai.geminiHelp": "Create a free key at aistudio.google.com (Get API key), then paste it here. It is stored only on this phone. On the free tier, Google may use conversations to improve its products.",
+  "ai.geminiKeyPlaceholder": "Gemini API key",
+  "ai.getGeminiKey": "Get a free key",
+  "ai.checkGeminiKey": "Check key",
+  "ai.geminiKeyOk": "✓ Key works · model: {model}",
+  "ai.geminiKeyNoLive": "Key works, but no Live voice model is available for it.",
+  "ai.geminiKeyInvalid": "Key rejected by Google",
+  "ai.geminiKeyNetwork": "Could not reach Google: {message}",
+  "ai.geminiVoice": "Gemini voice",
+  "ai.geminiVoiceHelp": "Applied from the next conversation.",
+  "ai.geminiModel": "Model: {model}",
 };
 
 const tables: Record<InterfaceLanguage, TranslationTable> = { uk, en, ru, fr };

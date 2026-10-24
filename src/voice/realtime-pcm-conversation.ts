@@ -42,6 +42,9 @@ import {
   type RealtimePhysicalCommand,
 } from "./realtime-physical-command";
 import { parseRealtimeVisualCommand, type RealtimeVisualCommand } from "./realtime-visual-command";
+import { GeminiLiveSocket } from "../gemini/gemini-live-socket";
+import { getGeminiApiKey, MissingGeminiApiKeyError } from "../gemini/gemini-api-key";
+import type { AiProvider } from "../store/user";
 
 const WS_OPEN_TIMEOUT_MS = 9_000;
 const CAPTURE_RELEASE_SETTLE_MS = 220;
@@ -50,6 +53,16 @@ const STARTUP_PREROLL_RECENT_MS = 900;
 const UPLINK_LEVEL_WINDOW_MS = 500;
 
 type RealtimeEvent = Record<string, any> & { type?: string };
+/** French fork: OpenAI WebSocket or the Gemini Live adapter (same surface). */
+type RealtimeSocket = {
+  readyState: number;
+  onopen: any;
+  onmessage: any;
+  onerror: any;
+  onclose: any;
+  send(data: string): void;
+  close(): void;
+};
 type Subscription = { remove: () => void };
 
 function makeSessionId(): string {
@@ -92,7 +105,8 @@ export class RealtimePcmConversationService {
   private active = false;
   private stopping = false;
   private configured = false;
-  private webSocket: WebSocket | null = null;
+  private webSocket: RealtimeSocket | null = null;
+  private provider: AiProvider = "openai";
   private stopPromise: Promise<void> | null = null;
   private captureAudioSubscription: Subscription | null = null;
   private captureErrorSubscription: Subscription | null = null;
@@ -233,7 +247,10 @@ export class RealtimePcmConversationService {
     this.captureLevelWindowChunks = 0;
     this.captureLevelWindowGainClippedSamples = 0;
     this.captureLevelWindowFirstSequence = null;
-    this.sessionModel = useUserStore.getState().preferences.realtimeModelId;
+    this.provider = useUserStore.getState().preferences.aiProvider;
+    this.sessionModel = this.provider === "gemini"
+      ? useUserStore.getState().preferences.geminiModelId
+      : useUserStore.getState().preferences.realtimeModelId;
     this.playbackGainClippedSamples = 0;
     this.playbackGainTotalSamples = 0;
 
@@ -249,7 +266,7 @@ export class RealtimePcmConversationService {
     useUserStore.getState().setVoiceState("listening");
 
     recordDiagnosticEvent("realtime", "pcm-session-start", {
-      transport: "openai-websocket-app-owned-pcm",
+      transport: this.provider === "gemini" ? "gemini-live-websocket-app-owned-pcm" : "openai-websocket-app-owned-pcm",
       model: this.sessionModel,
       source: detection?.source ?? "manual",
       captureRequested: "VOICE_COMMUNICATION/16000/mono/pcm16/explicit-platform-aec",
@@ -291,12 +308,20 @@ export class RealtimePcmConversationService {
         this.sessionMemoryContext
       );
       const sessionConfig = (sessionUpdate.session ?? {}) as Record<string, unknown>;
-      const clientSecret = await createOpenAiRealtimeClientSecret(sessionConfig);
+      let clientSecretValue = "";
+      let geminiApiKey = "";
+      if (this.provider === "gemini") {
+        geminiApiKey = (await getGeminiApiKey()) ?? "";
+        if (!geminiApiKey) throw new MissingGeminiApiKeyError();
+      } else {
+        const clientSecret = await createOpenAiRealtimeClientSecret(sessionConfig);
+        clientSecretValue = clientSecret.value;
+        recordDiagnosticEvent("realtime", "pcm-ephemeral-secret-created", {
+          expiresAt: clientSecret.expiresAt,
+          persisted: false,
+        });
+      }
       if (!this.active) return;
-      recordDiagnosticEvent("realtime", "pcm-ephemeral-secret-created", {
-        expiresAt: clientSecret.expiresAt,
-        persisted: false,
-      });
 
       // Preserve the proven v2.1.86 mic handoff guardrail. Quiesce the entire
       // wake/fallback path while Classic capture is still alive, then release
@@ -343,15 +368,28 @@ export class RealtimePcmConversationService {
       this.bindNativeAudioEvents();
       useConversationStore.getState().setRealtimeIssue(null);
 
-      const ws = createOpenAiRealtimeEphemeralWebSocket(clientSecret.value, this.sessionModel);
+      const ws: RealtimeSocket = this.provider === "gemini"
+        ? new GeminiLiveSocket({
+          apiKey: geminiApiKey,
+          model: this.sessionModel,
+          voiceName: useUserStore.getState().preferences.geminiVoiceId,
+          // Robot/camera commands are executed locally; Gemini cannot cancel a
+          // reply, so the adapter drops the spoken answer for those turns.
+          isLocallyHandledTranscript: (transcript) => {
+            const preferences = useUserStore.getState().preferences;
+            return Boolean(parseRealtimePhysicalCommand(transcript, preferences) || parseRealtimeVisualCommand(transcript, preferences));
+          },
+          log: (event, details) => recordDiagnosticEvent("realtime", event, (details ?? {}) as any),
+        })
+        : createOpenAiRealtimeEphemeralWebSocket(clientSecretValue, this.sessionModel);
       this.webSocket = ws;
       this.bindWebSocket(ws);
       await this.waitForWebSocketOpen(ws);
       if (!this.active) return;
       this.send(sessionUpdate);
-      recordDiagnosticEvent("realtime", "pcm-openai-connected", {
+      recordDiagnosticEvent("realtime", this.provider === "gemini" ? "pcm-gemini-connected" : "pcm-openai-connected", {
         transport: "websocket",
-        auth: "ephemeral-subprotocol",
+        auth: this.provider === "gemini" ? "api-key" : "ephemeral-subprotocol",
         model: this.sessionModel,
       });
     } catch (error) {
@@ -360,7 +398,7 @@ export class RealtimePcmConversationService {
       if (issue === "no_credits" || issue === "invalid_key") {
         useConversationStore.getState().setRealtimeIssue(issue);
         useConversationStore.getState().setRealtimeReadiness("error");
-        void setOpenAiApiStatus(issue, message);
+        void this.reportOpenAiStatus(issue, message);
       }
       recordDiagnosticEvent("realtime", "pcm-session-start-failed", {
         error: message,
@@ -516,9 +554,7 @@ export class RealtimePcmConversationService {
       if (Math.abs(sample) * REALTIME_UPLINK_GAIN > 1) gainClippedSamples += 1;
     }
     const gainedSamples = applyRealtimeUplinkGain(samples);
-    const resampled = resample16kTo24k(gainedSamples);
-    const audio = bytesToBase64(floatSamplesToPcm16Bytes(resampled));
-    this.send({ type: "input_audio_buffer.append", audio });
+    this.sendUplinkAudio(gainedSamples);
 
     const frames = Number.isFinite(event.frames) && event.frames > 0 ? event.frames : 0;
     const rms = Number.isFinite(event.rms) && event.rms >= 0 ? event.rms : 0;
@@ -547,7 +583,7 @@ export class RealtimePcmConversationService {
         sourceRate: event.sampleRate,
         sourceFrames: event.frames,
         windowFrames,
-        openAiRate: 24_000,
+        openAiRate: this.provider === "gemini" ? 16_000 : 24_000,
         firstSequence: this.captureLevelWindowFirstSequence,
         sequence: event.sequence,
       });
@@ -561,8 +597,8 @@ export class RealtimePcmConversationService {
     }
   }
 
-  private bindWebSocket(ws: WebSocket): void {
-    ws.onmessage = (message) => {
+  private bindWebSocket(ws: RealtimeSocket): void {
+    ws.onmessage = (message: { data?: unknown }) => {
       if (!this.active) return;
       try {
         const event = JSON.parse(String(message.data ?? "")) as RealtimeEvent;
@@ -577,13 +613,13 @@ export class RealtimePcmConversationService {
       if (!this.active) return;
       recordDiagnosticEvent("realtime", "pcm-websocket-error");
     };
-    ws.onclose = (event) => {
+    ws.onclose = (event: { code: number; reason: string }) => {
       if (!this.active || this.stopping) return;
       const issue = classifyOpenAiError(event.code, event.reason);
       if (issue === "no_credits" || issue === "invalid_key") {
         useConversationStore.getState().setRealtimeIssue(issue);
         useConversationStore.getState().setRealtimeReadiness("error");
-        void setOpenAiApiStatus(issue, event.reason);
+        void this.reportOpenAiStatus(issue, event.reason);
       }
       recordDiagnosticEvent("realtime", "pcm-websocket-closed", {
         code: event.code,
@@ -593,18 +629,18 @@ export class RealtimePcmConversationService {
     };
   }
 
-  private waitForWebSocketOpen(ws: WebSocket): Promise<void> {
+  private waitForWebSocketOpen(ws: RealtimeSocket): Promise<void> {
     if (ws.readyState === WebSocket.OPEN) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`OpenAI Realtime PCM WebSocket did not open within ${WS_OPEN_TIMEOUT_MS}ms`)), WS_OPEN_TIMEOUT_MS);
       const previousOpen = ws.onopen;
       const previousError = ws.onerror;
-      ws.onopen = (event) => {
+      ws.onopen = (event: unknown) => {
         clearTimeout(timer);
         previousOpen?.call(ws, event);
         resolve();
       };
-      ws.onerror = (event) => {
+      ws.onerror = (event: unknown) => {
         clearTimeout(timer);
         previousError?.call(ws, event);
         reject(new Error("OpenAI Realtime PCM WebSocket failed to open"));
@@ -654,8 +690,12 @@ export class RealtimePcmConversationService {
       this.pendingPreroll = null;
       if (preroll && preroll.sampleRate === 16_000 && preroll.samples.length > 0) {
         const gainedPreroll = applyRealtimeUplinkGain(preroll.samples);
-        const resampled = resample16kTo24k(gainedPreroll);
-        this.send({ type: "input_audio_buffer.append", audio: bytesToBase64(floatSamplesToPcm16Bytes(resampled)) });
+        if (this.provider === "gemini") {
+          this.sendUplinkAudio(gainedPreroll);
+        } else {
+          const resampled = resample16kTo24k(gainedPreroll);
+          this.send({ type: "input_audio_buffer.append", audio: bytesToBase64(floatSamplesToPcm16Bytes(resampled)) });
+        }
         recordDiagnosticEvent("realtime", "pcm-startup-preroll-seeded", {
           durationMs: Math.round((preroll.samples.length / preroll.sampleRate) * 1000),
           uplinkGain: REALTIME_UPLINK_GAIN,
@@ -663,7 +703,7 @@ export class RealtimePcmConversationService {
       }
       useConversationStore.getState().setRealtimeReadiness("ready");
       useConversationStore.getState().setRealtimeIssue(null);
-      void setOpenAiApiStatus("working", "Realtime session reached ready state");
+      void this.reportOpenAiStatus("working", "Realtime session reached ready state");
       recordDiagnosticEvent("realtime", "pcm-readiness-ready", {
         barrier: "session-updated-plus-native-capture",
         captureSampleRate: status.captureSampleRate,
@@ -682,7 +722,7 @@ export class RealtimePcmConversationService {
       if (issue === "no_credits" || issue === "invalid_key") {
         useConversationStore.getState().setRealtimeIssue(issue);
         useConversationStore.getState().setRealtimeReadiness("error");
-        void setOpenAiApiStatus(issue, message);
+        void this.reportOpenAiStatus(issue, message);
       }
       recordDiagnosticEvent("realtime", "pcm-openai-error", {
         code,
@@ -1120,6 +1160,21 @@ export class RealtimePcmConversationService {
       item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) },
     });
     this.send({ type: "response.create" });
+  }
+
+  /** OpenAI balance/status UI only; Gemini problems surface through realtimeIssue. */
+  private reportOpenAiStatus(kind: Parameters<typeof setOpenAiApiStatus>[0], detail?: string | null): Promise<void> {
+    if (this.provider !== "openai") return Promise.resolve();
+    return setOpenAiApiStatus(kind, detail);
+  }
+
+  /** Gemini takes 16 kHz PCM natively; OpenAI Realtime takes 24 kHz. */
+  private sendUplinkAudio(gainedSamples: number[]): void {
+    if (this.provider === "gemini") {
+      this.send({ type: "input_audio_buffer.append", audio: bytesToBase64(floatSamplesToPcm16Bytes(gainedSamples)), sample_rate: 16_000 });
+      return;
+    }
+    this.send({ type: "input_audio_buffer.append", audio: bytesToBase64(floatSamplesToPcm16Bytes(resample16kTo24k(gainedSamples))) });
   }
 
   private send(event: Record<string, unknown>): void {

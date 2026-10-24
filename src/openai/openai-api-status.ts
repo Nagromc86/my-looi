@@ -66,10 +66,14 @@ export function classifyOpenAiError(code: unknown, message: unknown): OpenAiApiS
   const normalizedCode = String(code ?? "").toLowerCase();
   const normalizedMessage = String(message ?? "").toLowerCase();
   const combined = `${normalizedCode} ${normalizedMessage}`;
-  if (combined.includes("credit_balance_exhausted") || combined.includes("insufficient_quota") || combined.includes("no credits")) {
+  if (
+    combined.includes("credit_balance_exhausted") || combined.includes("insufficient_quota") || combined.includes("no credits") ||
+    combined.includes("resource_exhausted") || combined.includes("resource exhausted") || combined.includes("quota")
+  ) {
     return "no_credits";
   }
-  if (combined.includes("invalid_api_key") || combined.includes("incorrect api key") || combined.includes("authentication") || combined.includes("http 401")) {
+  if (combined.includes("invalid_api_key") || combined.includes("incorrect api key") || combined.includes("authentication") || combined.includes("http 401") ||
+    combined.includes("api key not valid") || combined.includes("api_key_invalid") || combined.includes("permission_denied")) {
     return "invalid_key";
   }
   return null;

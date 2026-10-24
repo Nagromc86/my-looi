@@ -25,6 +25,15 @@ import { useUiText } from "@/src/i18n/use-ui-text";
 import { getLocalizedModelDownloadStage, getLocalizedVoiceDescription } from "@/src/i18n/ui-strings";
 import { REALTIME_VOICE_OPTIONS, TTS_SPEED_OPTIONS } from "@/src/voice/tts-voices";
 import {
+  checkGeminiApiKey,
+  clearGeminiApiKey,
+  GEMINI_API_KEY_URL,
+  hasGeminiApiKey,
+  saveGeminiApiKey,
+  validateGeminiApiKey,
+} from "@/src/gemini/gemini-api-key";
+import { GEMINI_VOICES } from "@/src/gemini/gemini-voices";
+import {
   clearOpenAiApiKey,
   hasOpenAiApiKey,
   listOpenAiRealtimeModels,
@@ -108,6 +117,10 @@ export default function SettingsScreen() {
   const [voicesExpanded, setVoicesExpanded] = useState(false);
   const [previousModelsExpanded, setPreviousModelsExpanded] = useState(false);
   const [openAiKeyConfigured, setOpenAiKeyConfigured] = useState(false);
+  const [geminiKeyConfigured, setGeminiKeyConfigured] = useState(false);
+  const [geminiKeyInput, setGeminiKeyInput] = useState("");
+  const [geminiBusy, setGeminiBusy] = useState(false);
+  const [geminiResult, setGeminiResult] = useState<string | null>(null);
   const [openAiKeyInput, setOpenAiKeyInput] = useState("");
   const [openAiKeyBusy, setOpenAiKeyBusy] = useState(false);
   const [openAiKeyResult, setOpenAiKeyResult] = useState<string | null>(null);
@@ -197,7 +210,8 @@ export default function SettingsScreen() {
     recordDiagnosticEvent("navigation", "settings-focused");
     void voiceRuntime.suspendMainScreenConversation("settings-focused");
     refreshOpenAi();
-    void refreshOpenAiModels();
+    void hasGeminiApiKey().then(setGeminiKeyConfigured).catch(() => setGeminiKeyConfigured(false));
+    if (useUserStore.getState().preferences.aiProvider === "openai") void refreshOpenAiModels();
     void refreshModels();
     void refreshMemory();
     void refreshRobot();
@@ -214,6 +228,55 @@ export default function SettingsScreen() {
       error: error instanceof Error ? error.message : String(error),
     }));
   }, [updatePreferences]);
+
+  const checkGeminiKey = useCallback(async () => {
+    setGeminiBusy(true);
+    setGeminiResult(null);
+    try {
+      const result = await checkGeminiApiKey();
+      if (!result.ok) {
+        setGeminiResult(result.reason === "invalid_key"
+          ? t("ai.geminiKeyInvalid")
+          : t("ai.geminiKeyNetwork", { message: result.detail }));
+        return;
+      }
+      if (!result.liveModels.length) {
+        setGeminiResult(t("ai.geminiKeyNoLive"));
+        return;
+      }
+      updatePreferences({ geminiModelId: result.recommendedModel });
+      setGeminiResult(t("ai.geminiKeyOk", { model: result.recommendedModel }));
+    } catch (error) {
+      setGeminiResult(t("common.error", { message: error instanceof Error ? error.message : String(error) }));
+    } finally {
+      setGeminiBusy(false);
+    }
+  }, [t, updatePreferences]);
+
+  const saveGeminiKey = useCallback(async () => {
+    if (geminiBusy) return;
+    try {
+      await saveGeminiApiKey(validateGeminiApiKey(geminiKeyInput));
+      setGeminiKeyInput("");
+      setGeminiKeyConfigured(true);
+      await checkGeminiKey();
+    } catch (error) {
+      setGeminiResult(t("common.error", { message: error instanceof Error ? error.message : String(error) }));
+    }
+  }, [checkGeminiKey, geminiBusy, geminiKeyInput, t]);
+
+  const deleteGeminiKey = useCallback(() => {
+    void clearGeminiApiKey().then(() => {
+      setGeminiKeyConfigured(false);
+      setGeminiResult(t("settings.keyDeleted"));
+    });
+  }, [t]);
+
+  const selectAiProvider = useCallback((aiProvider: "gemini" | "openai") => {
+    updatePreferences({ aiProvider });
+    recordDiagnosticEvent("runtime", "ai-provider-selected", { aiProvider });
+    if (aiProvider === "openai") void refreshOpenAiModels();
+  }, [refreshOpenAiModels, updatePreferences]);
 
   const saveKey = useCallback(async () => {
     if (openAiKeyBusy) return;
@@ -493,7 +556,11 @@ export default function SettingsScreen() {
   return (
     <DeviceShell title={t("settings.title")} eyebrow="MY LOOI">
       <View style={styles.summaryGrid}>
-        <Summary
+        {preferences.aiProvider === "gemini" ? <Summary
+          label="Gemini"
+          value={geminiKeyConfigured ? t("settings.summary.keySaved") : t("settings.summary.keyNeeded")}
+          ok={geminiKeyConfigured}
+        /> : <Summary
           label="OpenAI"
           value={!openAiKeyConfigured
             ? t("settings.summary.keyNeeded")
@@ -503,7 +570,7 @@ export default function SettingsScreen() {
                 ? t("settings.openAiStatus.invalid_key")
                 : t("settings.summary.keySaved")}
           ok={openAiKeyConfigured && openAiApiStatus.kind !== "no_credits" && openAiApiStatus.kind !== "invalid_key"}
-        />
+        />}
         <Summary label={t("settings.summary.local")} value={sharedReady ? t("settings.summary.localReady") : t("settings.summary.localCheck")} ok={sharedReady} />
         <Summary label={t("settings.summary.robot")} value={robotRuntime.connected ? t("settings.summary.robotConnected") : robotUi.saved ? t("settings.summary.robotSaved") : t("settings.summary.robotNone")} ok={robotRuntime.connected} neutral={!robotRuntime.connected} />
       </View>
@@ -517,7 +584,27 @@ export default function SettingsScreen() {
         <ButtonRow>{RESPONSE_LANGUAGE_OPTIONS.map((item) => <SmallChoice key={item.id} selected={preferences.language === item.id} label={item.shortLabel} onPress={() => updatePreferences({ language: item.id })} />)}</ButtonRow>
       </Section>
 
-      <Section title="OpenAI">
+      <Section title={t("ai.title")}>
+        <Text style={styles.help}>{t("ai.help")}</Text>
+        <ButtonRow>
+          <SmallChoice selected={preferences.aiProvider === "gemini"} label={t("ai.gemini")} onPress={() => selectAiProvider("gemini")} />
+          <SmallChoice selected={preferences.aiProvider === "openai"} label={t("ai.openai")} onPress={() => selectAiProvider("openai")} />
+        </ButtonRow>
+        {preferences.aiProvider === "gemini" ? <View style={styles.subCard}>
+          <Text style={styles.help}>{t("ai.geminiHelp")}</Text>
+          <Action label={t("ai.getGeminiKey")} onPress={() => void openExternalUrl("gemini-api-key", GEMINI_API_KEY_URL)} secondary />
+          <TextInput value={geminiKeyInput} onChangeText={setGeminiKeyInput} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder={geminiKeyConfigured ? t("settings.newKey") : t("ai.geminiKeyPlaceholder")} placeholderTextColor={looiTheme.muted} style={styles.input} />
+          <ButtonRow>
+            <Action label={geminiBusy ? t("settings.saving") : geminiKeyConfigured ? t("common.replace") : t("common.save")} onPress={() => void saveGeminiKey()} disabled={geminiBusy || !geminiKeyInput.trim()} />
+            {geminiKeyConfigured ? <Action label={t("ai.checkGeminiKey")} onPress={() => void checkGeminiKey()} disabled={geminiBusy} secondary /> : null}
+            {geminiKeyConfigured ? <Action label={t("common.delete")} onPress={deleteGeminiKey} secondary /> : null}
+          </ButtonRow>
+          {geminiResult ? <Text style={styles.result}>{geminiResult}</Text> : null}
+          <Text style={styles.help}>{t("ai.geminiModel", { model: preferences.geminiModelId })}</Text>
+        </View> : null}
+      </Section>
+
+      {preferences.aiProvider === "openai" ? <Section title="OpenAI">
         <Text style={styles.help}>{t("settings.openAiHelp")}</Text>
         <TextInput value={openAiKeyInput} onChangeText={setOpenAiKeyInput} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder={openAiKeyConfigured ? t("settings.newKey") : "OpenAI API key"} placeholderTextColor={looiTheme.muted} style={styles.input} />
         <ButtonRow>
@@ -571,15 +658,23 @@ export default function SettingsScreen() {
           {openAiModelsResult ? <Text style={styles.result}>{openAiModelsResult}</Text> : null}
           <Text style={styles.help}>{t("settings.costDisclaimer")}</Text>
         </View>
-      </Section>
+      </Section> : null}
 
       <Section title={t("settings.voice")}>
+        {preferences.aiProvider === "gemini" ? <>
+          <Text style={styles.help}>{t("ai.geminiVoiceHelp")}</Text>
+          <DisclosureRow label={t("settings.voiceSelected", { voice: preferences.geminiVoiceId })} expanded={voicesExpanded} onPress={() => setVoicesExpanded((value) => !value)} />
+          {voicesExpanded ? <View style={styles.disclosureBody}>
+            {GEMINI_VOICES.map((voice) => <Choice key={voice.id} selected={preferences.geminiVoiceId === voice.id} label={voice.id} detail={interfaceLanguage === "fr" ? voice.descriptionFr : voice.descriptionEn} onPress={() => updatePreferences({ geminiVoiceId: voice.id })} />)}
+          </View> : null}
+        </> : <>
         <Text style={styles.help}>{t("settings.voiceHelp")}</Text>
         <DisclosureRow label={t("settings.voiceSelected", { voice: curatedVoices.find((voice) => voice.id === preferences.ttsVoiceId)?.name ?? preferences.ttsVoiceId })} expanded={voicesExpanded} onPress={() => setVoicesExpanded((value) => !value)} />
         {voicesExpanded ? <View style={styles.disclosureBody}>
           {curatedVoices.map((voice) => <VoiceChoice key={voice.id} selected={preferences.ttsVoiceId === voice.id} label={voice.name} detail={`${getLocalizedVoiceDescription(interfaceLanguage, voice.id, voice.description)}${voice.id === "marin" || voice.id === "cedar" ? ` · ${t("settings.voiceRecommended")}` : ""}`} onSelect={() => updatePreferences({ ttsVoiceId: voice.id })} onPreview={() => void previewVoice(voice.id)} previewing={voicePreviewBusy === voice.id} previewDisabled={Boolean(voicePreviewBusy) || !openAiKeyConfigured} />)}
           {voicePreviewResult ? <Text style={styles.result}>{voicePreviewResult}</Text> : null}
         </View> : null}
+        </>}
         <Text style={styles.label}>{t("settings.speechGender")}</Text>
         <Text style={styles.help}>{t("settings.speechGenderHelp")}</Text>
         <ButtonRow>
