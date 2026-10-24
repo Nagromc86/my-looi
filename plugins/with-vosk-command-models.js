@@ -2,7 +2,12 @@ const { withDangerousMod } = require("expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
-const MODEL_DIRS = ["vosk-command-ru", "vosk-command-uk", "vosk-command-en", "vosk-command-fr"];
+// French fork: copy whichever models scripts/download-vosk-command-models.sh
+// staged (selected with VOSK_LANGUAGES), instead of requiring all of them.
+function stagedModelDirs(sourceRoot) {
+  if (!fs.existsSync(sourceRoot)) return [];
+  return fs.readdirSync(sourceRoot).filter((name) => name.startsWith("vosk-command-"));
+}
 
 module.exports = function withVoskCommandModels(config) {
   return withDangerousMod(config, [
@@ -14,7 +19,11 @@ module.exports = function withVoskCommandModels(config) {
       const assetsRoot = path.join(androidRoot, "app", "src", "main", "assets");
       fs.mkdirSync(assetsRoot, { recursive: true });
 
-      for (const modelDir of MODEL_DIRS) {
+      const modelDirs = stagedModelDirs(sourceRoot);
+      if (!modelDirs.includes("vosk-command-fr")) {
+        throw new Error("Missing Vosk command model vosk-command-fr. Run scripts/download-vosk-command-models.sh before expo prebuild.");
+      }
+      for (const modelDir of modelDirs) {
         const source = path.join(sourceRoot, modelDir);
         const destination = path.join(assetsRoot, modelDir);
         if (!fs.existsSync(source)) {
