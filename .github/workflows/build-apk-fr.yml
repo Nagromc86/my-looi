@@ -3,10 +3,10 @@ name: Build APK (French)
 # Builds the French My LOOI APK and publishes it as a GitHub Release, so it can
 # be downloaded directly from a phone (Releases page → my-looi-fr.apk).
 #
-# Signing: if the repository secret LOOI_KEYSTORE_BASE64 exists, that permanent
-# key is used and each new APK installs over the previous one (memory kept).
-# Without it, a temporary key is generated for this build only: the APK works,
-# but to install a later build you must first uninstall the previous one.
+# Signing: the permanent key is stored encrypted in signing/ and unlocked with
+# the repository secret LOOI_KEYSTORE_PASSWORD. Every APK is signed with the
+# same key, so new versions install over the previous one and keep LOOI's
+# memory and settings. The build stops if the secret is missing.
 
 on:
   workflow_dispatch:
@@ -27,8 +27,8 @@ jobs:
     timeout-minutes: 90
     env:
       MY_LOOI_RELEASE_KEY_ALIAS: my-looi
-      MY_LOOI_RELEASE_STORE_PASSWORD: ${{ secrets.LOOI_KEYSTORE_PASSWORD || 'my-looi-fr-keystore' }}
-      MY_LOOI_RELEASE_KEY_PASSWORD: ${{ secrets.LOOI_KEYSTORE_PASSWORD || 'my-looi-fr-keystore' }}
+      MY_LOOI_RELEASE_STORE_PASSWORD: ${{ secrets.LOOI_KEYSTORE_PASSWORD }}
+      MY_LOOI_RELEASE_KEY_PASSWORD: ${{ secrets.LOOI_KEYSTORE_PASSWORD }}
       GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
       EXPO_NO_TELEMETRY: "1"
     steps:
@@ -65,22 +65,22 @@ jobs:
           corepack pnpm run motion:safety-test
           corepack pnpm run motion:cliff-test
 
-      - name: Prepare signing key
-        env:
-          KEYSTORE_B64: ${{ secrets.LOOI_KEYSTORE_BASE64 }}
+      - name: Unlock the permanent signing key
         run: |
+          if [ -z "$MY_LOOI_RELEASE_STORE_PASSWORD" ]; then
+            echo "::error::Secret LOOI_KEYSTORE_PASSWORD manquant. Ajoute-le dans Settings > Secrets and variables > Actions, puis relance."
+            exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/signing"
           ks="$RUNNER_TEMP/signing/my-looi-release.keystore"
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$ks"
-            echo "Using the permanent signing key from LOOI_KEYSTORE_BASE64."
-          else
-            echo "::warning::No LOOI_KEYSTORE_BASE64 secret: using a temporary key. Uninstall the previous APK before installing this one."
-            keytool -genkeypair -v -keystore "$ks" -alias "$MY_LOOI_RELEASE_KEY_ALIAS" \
-              -keyalg RSA -keysize 4096 -validity 10000 \
-              -storepass "$MY_LOOI_RELEASE_STORE_PASSWORD" -keypass "$MY_LOOI_RELEASE_KEY_PASSWORD" \
-              -dname "CN=My LOOI FR, O=Personal build"
+          printf '%s' "$MY_LOOI_RELEASE_STORE_PASSWORD" > "$RUNNER_TEMP/signing/pw"
+          if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 300000 \
+               -in signing/my-looi-release.keystore.enc -out "$ks" -pass "file:$RUNNER_TEMP/signing/pw"; then
+            echo "::error::Mot de passe LOOI_KEYSTORE_PASSWORD incorrect (vérifie qu'il n'y a pas d'espace en trop)."
+            exit 1
           fi
+          rm -f "$RUNNER_TEMP/signing/pw"
+          keytool -list -keystore "$ks" -storepass "$MY_LOOI_RELEASE_STORE_PASSWORD" | grep -i fingerprint
           echo "MY_LOOI_RELEASE_KEYSTORE=$ks" >> "$GITHUB_ENV"
 
       - name: Download offline voice-command models (incl. French)

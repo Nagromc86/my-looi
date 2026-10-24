@@ -30,6 +30,6 @@ Changer de langue à la voix : « Parle en anglais », « Réponds en français 
 
 Le workflow `.github/workflows/build-apk-fr.yml` construit l'APK sur GitHub et le publie dans **Releases** (`my-looi-fr.apk`).
 
-Pour que chaque nouvelle version s'installe par-dessus l'ancienne sans perdre la mémoire, ajoute une clé de signature permanente dans **Settings → Secrets and variables → Actions** : `LOOI_KEYSTORE_BASE64` (le fichier keystore encodé en base64) et `LOOI_KEYSTORE_PASSWORD`. Sans ces secrets, l'APK fonctionne mais il faut désinstaller l'ancienne version avant d'installer la nouvelle.
+La clé de signature permanente est stockée chiffrée dans `signing/`. Le workflow la déverrouille avec le secret `LOOI_KEYSTORE_PASSWORD` (Settings → Secrets and variables → Actions). Grâce à elle, chaque nouvelle version s'installe par-dessus l'ancienne en gardant la mémoire et les réglages. Garde ce mot de passe précieusement : sans lui, impossible de publier une mise à jour installable par-dessus.
 
 N'utilise pas le bouton « Mises à jour » dans l'app : il pointe vers la version d'origine (sans français), que ton téléphone refusera d'installer par-dessus celle-ci.
