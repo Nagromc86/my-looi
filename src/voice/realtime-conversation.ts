@@ -1872,7 +1872,7 @@ class RealtimeConversationRouterService {
 
   async start(detection?: WakewordDetection): Promise<void> {
     const { conversationMode: mode, aiProvider } = useUserStore.getState().preferences;
-    if (aiProvider === "gemini" || isPcmRealtimeMode(mode)) {
+    if (aiProvider !== "openai" || isPcmRealtimeMode(mode)) {
       return realtimePcmConversationService.start(detection);
     }
     return webRtcRealtimeConversationService.start(detection);

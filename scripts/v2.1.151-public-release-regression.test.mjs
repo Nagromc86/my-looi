@@ -25,8 +25,8 @@ assert.equal(
   crypto.createHash("sha256")
     .update(read("src/voice/realtime-pcm-conversation.ts"))
     .digest("hex"),
-  // French fork: language tool + Gemini provider branch; OpenAI audio path unchanged.
-  "e16a81b016f4fb7ea22388c712b00fed94439030ca90115873df30a24e71a01b"
+  // French fork: language tool + Gemini/Mistral provider branches; OpenAI audio path unchanged.
+  "b5cfd3358cd30eab111439203cbad48fa2e77b2756e92dee3a800d7f9dd4f10d"
 );
 
 assert.equal(

@@ -44,6 +44,13 @@ import {
 import { parseRealtimeVisualCommand, type RealtimeVisualCommand } from "./realtime-visual-command";
 import { GeminiLiveSocket } from "../gemini/gemini-live-socket";
 import { getGeminiApiKey, MissingGeminiApiKeyError } from "../gemini/gemini-api-key";
+import { FailoverRealtimeSocket } from "../mistral/failover-socket";
+import {
+  createMistralSocket,
+  isGeminiQuotaCoolingDown,
+  isMistralReady,
+  markGeminiQuotaExhausted,
+} from "../mistral/create-mistral-socket";
 import type { AiProvider } from "../store/user";
 
 const WS_OPEN_TIMEOUT_MS = 9_000;
@@ -250,7 +257,9 @@ export class RealtimePcmConversationService {
     this.provider = useUserStore.getState().preferences.aiProvider;
     this.sessionModel = this.provider === "gemini"
       ? useUserStore.getState().preferences.geminiModelId
-      : useUserStore.getState().preferences.realtimeModelId;
+      : this.provider === "mistral"
+        ? "mistral-cascade"
+        : useUserStore.getState().preferences.realtimeModelId;
     this.playbackGainClippedSamples = 0;
     this.playbackGainTotalSamples = 0;
 
@@ -266,7 +275,7 @@ export class RealtimePcmConversationService {
     useUserStore.getState().setVoiceState("listening");
 
     recordDiagnosticEvent("realtime", "pcm-session-start", {
-      transport: this.provider === "gemini" ? "gemini-live-websocket-app-owned-pcm" : "openai-websocket-app-owned-pcm",
+      transport: `${this.provider}-app-owned-pcm`,
       model: this.sessionModel,
       source: detection?.source ?? "manual",
       captureRequested: "VOICE_COMMUNICATION/16000/mono/pcm16/explicit-platform-aec",
@@ -310,9 +319,20 @@ export class RealtimePcmConversationService {
       const sessionConfig = (sessionUpdate.session ?? {}) as Record<string, unknown>;
       let clientSecretValue = "";
       let geminiApiKey = "";
-      if (this.provider === "gemini") {
-        geminiApiKey = (await getGeminiApiKey()) ?? "";
-        if (!geminiApiKey) throw new MissingGeminiApiKeyError();
+      let mistralFallbackReady = false;
+      if (this.provider === "mistral") {
+        if (!(await isMistralReady())) throw new Error("Mistral is not ready: API key or offline French voice missing");
+      } else if (this.provider === "gemini") {
+        mistralFallbackReady = useUserStore.getState().preferences.mistralFallback && (await isMistralReady());
+        if (mistralFallbackReady && isGeminiQuotaCoolingDown()) {
+          // Gemini's quota was hit recently: start directly on Mistral.
+          this.provider = "mistral";
+          this.sessionModel = "mistral-cascade";
+          recordDiagnosticEvent("realtime", "pcm-gemini-quota-cooldown-using-mistral");
+        } else {
+          geminiApiKey = (await getGeminiApiKey()) ?? "";
+          if (!geminiApiKey) throw new MissingGeminiApiKeyError();
+        }
       } else {
         const clientSecret = await createOpenAiRealtimeClientSecret(sessionConfig);
         clientSecretValue = clientSecret.value;
@@ -368,28 +388,46 @@ export class RealtimePcmConversationService {
       this.bindNativeAudioEvents();
       useConversationStore.getState().setRealtimeIssue(null);
 
-      const ws: RealtimeSocket = this.provider === "gemini"
-        ? new GeminiLiveSocket({
-          apiKey: geminiApiKey,
-          model: this.sessionModel,
-          voiceName: useUserStore.getState().preferences.geminiVoiceId,
-          // Robot/camera commands are executed locally; Gemini cannot cancel a
-          // reply, so the adapter drops the spoken answer for those turns.
-          isLocallyHandledTranscript: (transcript) => {
-            const preferences = useUserStore.getState().preferences;
-            return Boolean(parseRealtimePhysicalCommand(transcript, preferences) || parseRealtimeVisualCommand(transcript, preferences));
+      // Robot/camera commands are executed locally; Gemini and Mistral cannot
+      // cancel a reply, so the adapters drop the spoken answer for those turns.
+      const isLocallyHandledTranscript = (transcript: string) => {
+        const preferences = useUserStore.getState().preferences;
+        return Boolean(parseRealtimePhysicalCommand(transcript, preferences) || parseRealtimeVisualCommand(transcript, preferences));
+      };
+      const log = (event: string, details?: Record<string, unknown>) => recordDiagnosticEvent("realtime", event, (details ?? {}) as any);
+      const makeGemini = () => new GeminiLiveSocket({
+        apiKey: geminiApiKey,
+        model: this.sessionModel,
+        voiceName: useUserStore.getState().preferences.geminiVoiceId,
+        isLocallyHandledTranscript,
+        log,
+      });
+      const makeMistral = () => createMistralSocket({ isLocallyHandledTranscript, log });
+      let ws: RealtimeSocket;
+      if (this.provider === "mistral") {
+        ws = makeMistral();
+      } else if (this.provider === "gemini" && mistralFallbackReady) {
+        ws = new FailoverRealtimeSocket({
+          primary: makeGemini,
+          secondary: makeMistral,
+          onFailover: (details) => {
+            markGeminiQuotaExhausted();
+            recordDiagnosticEvent("realtime", "pcm-failover-gemini-to-mistral", details);
           },
-          log: (event, details) => recordDiagnosticEvent("realtime", event, (details ?? {}) as any),
-        })
-        : createOpenAiRealtimeEphemeralWebSocket(clientSecretValue, this.sessionModel);
+        });
+      } else if (this.provider === "gemini") {
+        ws = makeGemini();
+      } else {
+        ws = createOpenAiRealtimeEphemeralWebSocket(clientSecretValue, this.sessionModel);
+      }
       this.webSocket = ws;
       this.bindWebSocket(ws);
       await this.waitForWebSocketOpen(ws);
       if (!this.active) return;
       this.send(sessionUpdate);
-      recordDiagnosticEvent("realtime", this.provider === "gemini" ? "pcm-gemini-connected" : "pcm-openai-connected", {
-        transport: "websocket",
-        auth: this.provider === "gemini" ? "api-key" : "ephemeral-subprotocol",
+      recordDiagnosticEvent("realtime", `pcm-${this.provider}-connected`, {
+        transport: this.provider === "mistral" ? "cascade" : "websocket",
+        auth: this.provider === "openai" ? "ephemeral-subprotocol" : "api-key",
         model: this.sessionModel,
       });
     } catch (error) {
@@ -583,7 +621,7 @@ export class RealtimePcmConversationService {
         sourceRate: event.sampleRate,
         sourceFrames: event.frames,
         windowFrames,
-        openAiRate: this.provider === "gemini" ? 16_000 : 24_000,
+        openAiRate: this.provider === "openai" ? 24_000 : 16_000,
         firstSequence: this.captureLevelWindowFirstSequence,
         sequence: event.sequence,
       });
@@ -690,7 +728,7 @@ export class RealtimePcmConversationService {
       this.pendingPreroll = null;
       if (preroll && preroll.sampleRate === 16_000 && preroll.samples.length > 0) {
         const gainedPreroll = applyRealtimeUplinkGain(preroll.samples);
-        if (this.provider === "gemini") {
+        if (this.provider !== "openai") {
           this.sendUplinkAudio(gainedPreroll);
         } else {
           const resampled = resample16kTo24k(gainedPreroll);
@@ -1168,9 +1206,9 @@ export class RealtimePcmConversationService {
     return setOpenAiApiStatus(kind, detail);
   }
 
-  /** Gemini takes 16 kHz PCM natively; OpenAI Realtime takes 24 kHz. */
+  /** Gemini and the Mistral cascade take 16 kHz PCM; OpenAI Realtime takes 24 kHz. */
   private sendUplinkAudio(gainedSamples: number[]): void {
-    if (this.provider === "gemini") {
+    if (this.provider !== "openai") {
       this.send({ type: "input_audio_buffer.append", audio: bytesToBase64(floatSamplesToPcm16Bytes(gainedSamples)), sample_rate: 16_000 });
       return;
     }

@@ -4,6 +4,7 @@ import { getLooiRobotRuntimeState } from "@/src/device-tools/looi-robot";
 import { getSavedLooiRobot } from "@/src/device-tools/looi-robot-autoconnect";
 import { hasOpenAiApiKey } from "@/src/openai/openai-api-key";
 import { hasGeminiApiKey } from "@/src/gemini/gemini-api-key";
+import { hasMistralApiKey } from "@/src/mistral/mistral-api";
 import { useUserStore } from "@/src/store/user";
 import { checkAllSherpaModelReadiness, type SherpaModelCheck } from "@/src/voice/sherpa-models";
 import { getSetupStorageState, type SetupSkipState } from "./setup-storage";
@@ -37,7 +38,7 @@ export async function computeSetupReadiness(): Promise<SetupReadiness> {
   const storageState = getSetupStorageState();
   const [openAiKeyConfigured, modelResult, microphoneReady, robotReady] = await Promise.all([
     // French fork: "openAiKeyConfigured" means "the selected AI provider has a key".
-    useUserStore.getState().preferences.aiProvider === "openai" ? hasOpenAiApiKey() : hasGeminiApiKey(),
+    hasSelectedProviderKey(),
     checkAllSherpaModelReadiness().catch((error) => {
       console.warn("[Setup] Failed to check Sherpa model readiness:", error);
       return null;
@@ -92,4 +93,11 @@ async function getRobotReady(): Promise<boolean> {
     console.warn("[Setup] Failed to check robot readiness:", error);
     return false;
   }
+}
+
+function hasSelectedProviderKey(): Promise<boolean> {
+  const provider = useUserStore.getState().preferences.aiProvider;
+  if (provider === "openai") return hasOpenAiApiKey();
+  if (provider === "mistral") return hasMistralApiKey();
+  return hasGeminiApiKey();
 }

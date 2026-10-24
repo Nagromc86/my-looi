@@ -401,7 +401,7 @@ const en = {
 
   "ai.step": "AI",
   "ai.title": "AI engine",
-  "ai.help": "Choose the AI LOOI talks with. Gemini has a free tier; OpenAI is paid per minute.",
+  "ai.help": "Choose the AI LOOI talks with. Gemini and Mistral have a free mode; OpenAI is paid per minute.",
   "ai.gemini": "Gemini · free",
   "ai.openai": "OpenAI · paid",
   "ai.geminiHelp": "Create a free key at aistudio.google.com (Get API key), then paste it here. It is stored only on this phone. On the free tier, Google may use conversations to improve its products.",
@@ -415,6 +415,21 @@ const en = {
   "ai.geminiVoice": "Gemini voice",
   "ai.geminiVoiceHelp": "Applied from the next conversation.",
   "ai.geminiModel": "Model: {model}",
+  "ai.mistral": "Mistral · free · EU",
+  "ai.mistralHelp": "Create a key at console.mistral.ai (free mode, no card), then paste it here. Replies are spoken by an offline French voice on this phone.",
+  "ai.mistralKeyPlaceholder": "Mistral API key",
+  "ai.getMistralKey": "Get a Mistral key",
+  "ai.mistralKeyOk": "✓ Mistral key works",
+  "ai.mistralKeyInvalid": "Key rejected by Mistral",
+  "ai.frenchVoice": "Offline French voice",
+  "ai.frenchVoiceInstalled": "✓ Installed",
+  "ai.frenchVoiceMissing": "Not downloaded ({size} MB)",
+  "ai.frenchVoiceDownload": "Download the voice",
+  "ai.frenchVoiceDownloading": "Downloading… {percent}%",
+  "ai.frenchVoiceFailed": "Voice download failed: {message}",
+  "ai.fallback": "Switch to Mistral automatically when Gemini's free quota is reached",
+  "ai.fallbackHelp": "Needs a Mistral key and the French voice. The conversation continues without interruption, with LOOI's offline French voice.",
+  "ai.fallbackNotReady": "Add a Mistral key and download the French voice to enable it.",
 } as const;
 
 type UiStringKey = keyof typeof en;
@@ -818,7 +833,7 @@ const uk: TranslationTable = {
   // French fork: English fallback for AI provider settings.
   "ai.step": "AI",
   "ai.title": "AI engine",
-  "ai.help": "Choose the AI LOOI talks with. Gemini has a free tier; OpenAI is paid per minute.",
+  "ai.help": "Choose the AI LOOI talks with. Gemini and Mistral have a free mode; OpenAI is paid per minute.",
   "ai.gemini": "Gemini · free",
   "ai.openai": "OpenAI · paid",
   "ai.geminiHelp": "Create a free key at aistudio.google.com (Get API key), then paste it here. It is stored only on this phone. On the free tier, Google may use conversations to improve its products.",
@@ -832,6 +847,21 @@ const uk: TranslationTable = {
   "ai.geminiVoice": "Gemini voice",
   "ai.geminiVoiceHelp": "Applied from the next conversation.",
   "ai.geminiModel": "Model: {model}",
+  "ai.mistral": "Mistral · free · EU",
+  "ai.mistralHelp": "Create a key at console.mistral.ai (free mode, no card), then paste it here. Replies are spoken by an offline French voice on this phone.",
+  "ai.mistralKeyPlaceholder": "Mistral API key",
+  "ai.getMistralKey": "Get a Mistral key",
+  "ai.mistralKeyOk": "✓ Mistral key works",
+  "ai.mistralKeyInvalid": "Key rejected by Mistral",
+  "ai.frenchVoice": "Offline French voice",
+  "ai.frenchVoiceInstalled": "✓ Installed",
+  "ai.frenchVoiceMissing": "Not downloaded ({size} MB)",
+  "ai.frenchVoiceDownload": "Download the voice",
+  "ai.frenchVoiceDownloading": "Downloading… {percent}%",
+  "ai.frenchVoiceFailed": "Voice download failed: {message}",
+  "ai.fallback": "Switch to Mistral automatically when Gemini's free quota is reached",
+  "ai.fallbackHelp": "Needs a Mistral key and the French voice. The conversation continues without interruption, with LOOI's offline French voice.",
+  "ai.fallbackNotReady": "Add a Mistral key and download the French voice to enable it.",
 };
 
 const ru: TranslationTable = {
@@ -1232,7 +1262,7 @@ const ru: TranslationTable = {
   // French fork: English fallback for AI provider settings.
   "ai.step": "AI",
   "ai.title": "AI engine",
-  "ai.help": "Choose the AI LOOI talks with. Gemini has a free tier; OpenAI is paid per minute.",
+  "ai.help": "Choose the AI LOOI talks with. Gemini and Mistral have a free mode; OpenAI is paid per minute.",
   "ai.gemini": "Gemini · free",
   "ai.openai": "OpenAI · paid",
   "ai.geminiHelp": "Create a free key at aistudio.google.com (Get API key), then paste it here. It is stored only on this phone. On the free tier, Google may use conversations to improve its products.",
@@ -1246,6 +1276,21 @@ const ru: TranslationTable = {
   "ai.geminiVoice": "Gemini voice",
   "ai.geminiVoiceHelp": "Applied from the next conversation.",
   "ai.geminiModel": "Model: {model}",
+  "ai.mistral": "Mistral · free · EU",
+  "ai.mistralHelp": "Create a key at console.mistral.ai (free mode, no card), then paste it here. Replies are spoken by an offline French voice on this phone.",
+  "ai.mistralKeyPlaceholder": "Mistral API key",
+  "ai.getMistralKey": "Get a Mistral key",
+  "ai.mistralKeyOk": "✓ Mistral key works",
+  "ai.mistralKeyInvalid": "Key rejected by Mistral",
+  "ai.frenchVoice": "Offline French voice",
+  "ai.frenchVoiceInstalled": "✓ Installed",
+  "ai.frenchVoiceMissing": "Not downloaded ({size} MB)",
+  "ai.frenchVoiceDownload": "Download the voice",
+  "ai.frenchVoiceDownloading": "Downloading… {percent}%",
+  "ai.frenchVoiceFailed": "Voice download failed: {message}",
+  "ai.fallback": "Switch to Mistral automatically when Gemini's free quota is reached",
+  "ai.fallbackHelp": "Needs a Mistral key and the French voice. The conversation continues without interruption, with LOOI's offline French voice.",
+  "ai.fallbackNotReady": "Add a Mistral key and download the French voice to enable it.",
 };
 
 const tables: Record<InterfaceLanguage, TranslationTable> = { uk, en, ru, fr };

@@ -8,5 +8,6 @@
 4. ~~**Clé de signature permanente**~~ : fait (secret `LOOI_KEYSTORE_PASSWORD`).
 
 5. ~~**IA gratuite**~~ : fait (Gemini Live, niveau gratuit).
+6. ~~**Mistral (européen) + bascule automatique**~~ : fait.
 
 Autres idées évoquées : rappels vocaux, accueil par reconnaissance de visage.

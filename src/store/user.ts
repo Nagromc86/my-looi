@@ -27,6 +27,7 @@ import {
 } from "../i18n/ui-language";
 import { DEFAULT_GEMINI_LIVE_MODEL } from "../gemini/gemini-live-socket";
 import { DEFAULT_GEMINI_VOICE_ID, normalizeGeminiVoiceId } from "../gemini/gemini-voices";
+import { normalizeFrenchVoiceId, type FrenchVoiceId } from "../mistral/french-voice-ids";
 
 export type VoiceState =
   | "sleeping"
@@ -214,9 +215,13 @@ export type UserPreferences = {
   geminiVoiceId: string;
   /** French fork: Gemini Live model, chosen from the key's model list. */
   geminiModelId: string;
+  /** French fork: offline French voice used for Mistral replies. */
+  mistralVoiceId: FrenchVoiceId;
+  /** French fork: continue on Mistral when Gemini's free quota is reached. */
+  mistralFallback: boolean;
 };
 
-export type AiProvider = "gemini" | "openai";
+export type AiProvider = "gemini" | "mistral" | "openai";
 
 interface UserState {
   /** User profile ID */
@@ -278,6 +283,8 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   aiProvider: "gemini",
   geminiVoiceId: DEFAULT_GEMINI_VOICE_ID,
   geminiModelId: DEFAULT_GEMINI_LIVE_MODEL,
+  mistralVoiceId: "tom",
+  mistralFallback: true,
 };
 
 function loadPreferences(): UserPreferences {
@@ -343,7 +350,12 @@ function loadPreferences(): UserPreferences {
         const mode = (preferences as { conversationMode?: unknown }).conversationMode;
         return mode === "realtime" ? "realtime" : "realtime_pcm";
       })(),
-      aiProvider: (preferences as Partial<UserPreferences>).aiProvider === "openai" ? "openai" : "gemini",
+      aiProvider: (() => {
+        const provider = (preferences as Partial<UserPreferences>).aiProvider;
+        return provider === "openai" || provider === "mistral" ? provider : "gemini";
+      })(),
+      mistralVoiceId: normalizeFrenchVoiceId((preferences as Partial<UserPreferences>).mistralVoiceId),
+      mistralFallback: (preferences as Partial<UserPreferences>).mistralFallback !== false,
       geminiVoiceId: normalizeGeminiVoiceId((preferences as Partial<UserPreferences>).geminiVoiceId),
       geminiModelId: typeof (preferences as Partial<UserPreferences>).geminiModelId === "string" && /^[a-z0-9.\-]{3,80}$/.test((preferences as Partial<UserPreferences>).geminiModelId!)
         ? (preferences as Partial<UserPreferences>).geminiModelId!
@@ -351,6 +363,8 @@ function loadPreferences(): UserPreferences {
     };
     if (
       (preferences as Partial<UserPreferences>).aiProvider !== normalized.aiProvider ||
+      (preferences as Partial<UserPreferences>).mistralVoiceId !== normalized.mistralVoiceId ||
+      (preferences as Partial<UserPreferences>).mistralFallback !== normalized.mistralFallback ||
       (preferences as Partial<UserPreferences>).geminiVoiceId !== normalized.geminiVoiceId ||
       (preferences as Partial<UserPreferences>).geminiModelId !== normalized.geminiModelId ||
       (preferences as Partial<UserPreferences>).interfaceLanguage !== normalized.interfaceLanguage ||

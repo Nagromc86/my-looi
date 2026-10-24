@@ -237,6 +237,8 @@ export class GeminiLiveSocket {
       this.beginReconnect();
       return;
     }
+    // Never leave the service waiting for the end of a reply that is gone.
+    if (this.responseActive) this.finishResponse("cancelled", true);
     this.readyState = CLOSED;
     this.onclose?.({ code, reason: reason || `Gemini Live closed (${code})` });
   }

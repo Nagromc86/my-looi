@@ -64,6 +64,7 @@ jobs:
           corepack pnpm exec tsc --noEmit
           node scripts/french-language.test.mjs
           node scripts/gemini-live-adapter.test.mjs
+          node scripts/mistral-cascade.test.mjs
           corepack pnpm run motion:safety-test
           corepack pnpm run motion:cliff-test
 

@@ -9,21 +9,22 @@ Fork de [razor79/my-looi](https://github.com/razor79/my-looi) (licence MIT) avec
 - **Nom par défaut : « LOOI »**, et il répond aussi à « Louis » et « Robot ».
 - **Commandes vocales en français**, y compris un modèle de reconnaissance hors ligne français pour le mode conduite.
 
-## Choix de l'IA : Gemini (gratuit) ou OpenAI (payant)
+## Choix de l'IA : Gemini, Mistral ou OpenAI
 
-Par défaut, LOOI discute avec **Gemini Live** de Google, qui a un niveau gratuit.
+| Moteur | Prix | Voix | Données |
+|---|---|---|---|
+| **Gemini Live** (par défaut) | Gratuit avec limites | Très naturelle, interruption possible | Google (États-Unis) ; le niveau gratuit sert à améliorer leurs produits |
+| **Mistral** | Mode gratuit avec limites | Voix française hors ligne (Tom ou Siwis), un peu plus robotique | Mistral (Europe) ; la voix est générée sur le téléphone |
+| **OpenAI** | Payant à la minute | Très naturelle | OpenAI (États-Unis) |
 
-1. Va sur **https://aistudio.google.com/apikey** (connecte-toi avec ton compte Google).
-2. Appuie sur **Create API key** et copie la clé (elle commence par `AIza`).
-3. Dans l'app, à la première configuration (ou Réglages → Moteur d'IA), colle-la et enregistre.
+**Clé Gemini** : https://aistudio.google.com/apikey → « Create API key » (commence par `AIza`).
+**Clé Mistral** : https://console.mistral.ai/api-keys (mode gratuit, sans carte bancaire). À l'enregistrement, l'app télécharge la voix française (64 Mo, une seule fois).
 
-Bon à savoir :
-- Le niveau gratuit a des limites d'utilisation par minute et par jour ; si elles sont atteintes, LOOI le signale et il suffit de réessayer plus tard.
-- Sur le niveau gratuit, Google peut utiliser les conversations pour améliorer ses produits.
-- Les longues conversations sont reprises automatiquement quand Google renouvelle la connexion (toutes les ~10 minutes).
-- La voix se choisit dans Réglages → Voix de LOOI (Puck par défaut).
+### Bascule automatique Gemini → Mistral
 
-OpenAI reste disponible dans Réglages → Moteur d'IA (payant, avec ta clé OpenAI).
+Avec Gemini sélectionné, l'option « Basculer automatiquement sur Mistral » (activée par défaut) prend le relais quand le quota gratuit de Gemini est atteint : au démarrage ou en pleine conversation, sans coupure. LOOI reste ensuite sur Mistral 15 minutes avant de réessayer Gemini. Il faut pour cela une clé Mistral et la voix française téléchargée (Réglages → Moteur d'IA).
+
+Avec Mistral, LOOI écoute puis répond (pas d'interruption à la voix pendant qu'il parle : touche son visage pour l'arrêter).
 
 ## Commandes vocales
 

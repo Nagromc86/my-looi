@@ -34,6 +34,21 @@ import {
 } from "@/src/gemini/gemini-api-key";
 import { GEMINI_VOICES } from "@/src/gemini/gemini-voices";
 import {
+  checkMistralApiKey,
+  clearMistralApiKey,
+  hasMistralApiKey,
+  MISTRAL_API_KEY_URL,
+  saveMistralApiKey,
+  validateMistralApiKey,
+} from "@/src/mistral/mistral-api";
+import {
+  downloadFrenchVoice,
+  FRENCH_VOICE_DOWNLOAD_MB,
+  FRENCH_VOICES,
+  isFrenchVoiceInstalled,
+  releaseFrenchVoice,
+} from "@/src/mistral/french-voice";
+import {
   clearOpenAiApiKey,
   hasOpenAiApiKey,
   listOpenAiRealtimeModels,
@@ -121,6 +136,13 @@ export default function SettingsScreen() {
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
   const [geminiBusy, setGeminiBusy] = useState(false);
   const [geminiResult, setGeminiResult] = useState<string | null>(null);
+  const [mistralKeyConfigured, setMistralKeyConfigured] = useState(false);
+  const [mistralKeyInput, setMistralKeyInput] = useState("");
+  const [mistralBusy, setMistralBusy] = useState(false);
+  const [mistralResult, setMistralResult] = useState<string | null>(null);
+  const [frenchVoiceInstalled, setFrenchVoiceInstalled] = useState(false);
+  const [frenchVoiceProgress, setFrenchVoiceProgress] = useState<number | null>(null);
+  const [frenchVoiceError, setFrenchVoiceError] = useState<string | null>(null);
   const [openAiKeyInput, setOpenAiKeyInput] = useState("");
   const [openAiKeyBusy, setOpenAiKeyBusy] = useState(false);
   const [openAiKeyResult, setOpenAiKeyResult] = useState<string | null>(null);
@@ -211,6 +233,8 @@ export default function SettingsScreen() {
     void voiceRuntime.suspendMainScreenConversation("settings-focused");
     refreshOpenAi();
     void hasGeminiApiKey().then(setGeminiKeyConfigured).catch(() => setGeminiKeyConfigured(false));
+    void hasMistralApiKey().then(setMistralKeyConfigured).catch(() => setMistralKeyConfigured(false));
+    void isFrenchVoiceInstalled(useUserStore.getState().preferences.mistralVoiceId).then(setFrenchVoiceInstalled).catch(() => setFrenchVoiceInstalled(false));
     if (useUserStore.getState().preferences.aiProvider === "openai") void refreshOpenAiModels();
     void refreshModels();
     void refreshMemory();
@@ -272,7 +296,56 @@ export default function SettingsScreen() {
     });
   }, [t]);
 
-  const selectAiProvider = useCallback((aiProvider: "gemini" | "openai") => {
+  const downloadSelectedFrenchVoice = useCallback(async (voiceId = useUserStore.getState().preferences.mistralVoiceId) => {
+    setFrenchVoiceError(null);
+    setFrenchVoiceProgress(0);
+    try {
+      await downloadFrenchVoice(voiceId, (fraction) => setFrenchVoiceProgress(fraction));
+      setFrenchVoiceInstalled(await isFrenchVoiceInstalled(useUserStore.getState().preferences.mistralVoiceId));
+    } catch (error) {
+      setFrenchVoiceError(t("ai.frenchVoiceFailed", { message: error instanceof Error ? error.message : String(error) }));
+    } finally {
+      setFrenchVoiceProgress(null);
+    }
+  }, [t]);
+
+  const selectFrenchVoice = useCallback((voiceId: "tom" | "siwis") => {
+    updatePreferences({ mistralVoiceId: voiceId });
+    void releaseFrenchVoice();
+    void isFrenchVoiceInstalled(voiceId).then((installed) => {
+      setFrenchVoiceInstalled(installed);
+      if (!installed && mistralKeyConfigured) void downloadSelectedFrenchVoice(voiceId);
+    });
+  }, [downloadSelectedFrenchVoice, mistralKeyConfigured, updatePreferences]);
+
+  const saveMistralKey = useCallback(async () => {
+    if (mistralBusy) return;
+    setMistralBusy(true);
+    setMistralResult(null);
+    try {
+      await saveMistralApiKey(validateMistralApiKey(mistralKeyInput));
+      setMistralKeyInput("");
+      setMistralKeyConfigured(true);
+      const check = await checkMistralApiKey();
+      setMistralResult(check.ok ? t("ai.mistralKeyOk") : check.reason === "invalid_key" ? t("ai.mistralKeyInvalid") : t("ai.geminiKeyNetwork", { message: check.detail }));
+      if (check.ok && !(await isFrenchVoiceInstalled(useUserStore.getState().preferences.mistralVoiceId))) {
+        void downloadSelectedFrenchVoice();
+      }
+    } catch (error) {
+      setMistralResult(t("common.error", { message: error instanceof Error ? error.message : String(error) }));
+    } finally {
+      setMistralBusy(false);
+    }
+  }, [downloadSelectedFrenchVoice, mistralBusy, mistralKeyInput, t]);
+
+  const deleteMistralKey = useCallback(() => {
+    void clearMistralApiKey().then(() => {
+      setMistralKeyConfigured(false);
+      setMistralResult(t("settings.keyDeleted"));
+    });
+  }, [t]);
+
+  const selectAiProvider = useCallback((aiProvider: "gemini" | "mistral" | "openai") => {
     updatePreferences({ aiProvider });
     recordDiagnosticEvent("runtime", "ai-provider-selected", { aiProvider });
     if (aiProvider === "openai") void refreshOpenAiModels();
@@ -560,6 +633,10 @@ export default function SettingsScreen() {
           label="Gemini"
           value={geminiKeyConfigured ? t("settings.summary.keySaved") : t("settings.summary.keyNeeded")}
           ok={geminiKeyConfigured}
+        /> : preferences.aiProvider === "mistral" ? <Summary
+          label="Mistral"
+          value={mistralKeyConfigured ? t("settings.summary.keySaved") : t("settings.summary.keyNeeded")}
+          ok={mistralKeyConfigured && frenchVoiceInstalled}
         /> : <Summary
           label="OpenAI"
           value={!openAiKeyConfigured
@@ -588,6 +665,7 @@ export default function SettingsScreen() {
         <Text style={styles.help}>{t("ai.help")}</Text>
         <ButtonRow>
           <SmallChoice selected={preferences.aiProvider === "gemini"} label={t("ai.gemini")} onPress={() => selectAiProvider("gemini")} />
+          <SmallChoice selected={preferences.aiProvider === "mistral"} label={t("ai.mistral")} onPress={() => selectAiProvider("mistral")} />
           <SmallChoice selected={preferences.aiProvider === "openai"} label={t("ai.openai")} onPress={() => selectAiProvider("openai")} />
         </ButtonRow>
         {preferences.aiProvider === "gemini" ? <View style={styles.subCard}>
@@ -601,6 +679,32 @@ export default function SettingsScreen() {
           </ButtonRow>
           {geminiResult ? <Text style={styles.result}>{geminiResult}</Text> : null}
           <Text style={styles.help}>{t("ai.geminiModel", { model: preferences.geminiModelId })}</Text>
+          <Text style={styles.label}>{t("ai.fallback")}</Text>
+          <Text style={styles.help}>{mistralKeyConfigured && frenchVoiceInstalled ? t("ai.fallbackHelp") : t("ai.fallbackNotReady")}</Text>
+          <ButtonRow>
+            <SmallChoice selected={preferences.mistralFallback} label={t("common.on")} onPress={() => updatePreferences({ mistralFallback: true })} />
+            <SmallChoice selected={!preferences.mistralFallback} label={t("common.off")} onPress={() => updatePreferences({ mistralFallback: false })} />
+          </ButtonRow>
+        </View> : null}
+        {preferences.aiProvider === "mistral" || (preferences.aiProvider === "gemini" && preferences.mistralFallback) ? <View style={styles.subCard}>
+          <Text style={styles.label}>Mistral</Text>
+          <Text style={styles.help}>{t("ai.mistralHelp")}</Text>
+          <Action label={t("ai.getMistralKey")} onPress={() => void openExternalUrl("mistral-api-key", MISTRAL_API_KEY_URL)} secondary />
+          <TextInput value={mistralKeyInput} onChangeText={setMistralKeyInput} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder={mistralKeyConfigured ? t("settings.newKey") : t("ai.mistralKeyPlaceholder")} placeholderTextColor={looiTheme.muted} style={styles.input} />
+          <ButtonRow>
+            <Action label={mistralBusy ? t("settings.saving") : mistralKeyConfigured ? t("common.replace") : t("common.save")} onPress={() => void saveMistralKey()} disabled={mistralBusy || !mistralKeyInput.trim()} />
+            {mistralKeyConfigured ? <Action label={t("common.delete")} onPress={deleteMistralKey} secondary /> : null}
+          </ButtonRow>
+          {mistralResult ? <Text style={styles.result}>{mistralResult}</Text> : null}
+          <Text style={styles.label}>{t("ai.frenchVoice")}</Text>
+          <ButtonRow>
+            {FRENCH_VOICES.map((voice) => <SmallChoice key={voice.id} selected={preferences.mistralVoiceId === voice.id} label={interfaceLanguage === "fr" ? voice.labelFr : voice.labelEn} onPress={() => selectFrenchVoice(voice.id)} />)}
+          </ButtonRow>
+          <Text style={frenchVoiceInstalled ? styles.ok : styles.help}>{frenchVoiceProgress !== null
+            ? t("ai.frenchVoiceDownloading", { percent: Math.round(frenchVoiceProgress * 100) })
+            : frenchVoiceInstalled ? t("ai.frenchVoiceInstalled") : t("ai.frenchVoiceMissing", { size: FRENCH_VOICE_DOWNLOAD_MB })}</Text>
+          {!frenchVoiceInstalled && frenchVoiceProgress === null ? <Action label={t("ai.frenchVoiceDownload")} onPress={() => void downloadSelectedFrenchVoice()} secondary /> : null}
+          {frenchVoiceError ? <Text style={styles.result}>{frenchVoiceError}</Text> : null}
         </View> : null}
       </Section>
 
@@ -661,7 +765,9 @@ export default function SettingsScreen() {
       </Section> : null}
 
       <Section title={t("settings.voice")}>
-        {preferences.aiProvider === "gemini" ? <>
+        {preferences.aiProvider === "mistral" ? <>
+          <Text style={styles.help}>{t("ai.frenchVoice")}: {FRENCH_VOICES.find((voice) => voice.id === preferences.mistralVoiceId)?.[interfaceLanguage === "fr" ? "labelFr" : "labelEn"]}</Text>
+        </> : preferences.aiProvider === "gemini" ? <>
           <Text style={styles.help}>{t("ai.geminiVoiceHelp")}</Text>
           <DisclosureRow label={t("settings.voiceSelected", { voice: preferences.geminiVoiceId })} expanded={voicesExpanded} onPress={() => setVoicesExpanded((value) => !value)} />
           {voicesExpanded ? <View style={styles.disclosureBody}>

@@ -21,6 +21,14 @@ import {
 } from "@/src/gemini/gemini-api-key";
 import type { AiProvider } from "@/src/store/user";
 import {
+  checkMistralApiKey,
+  clearMistralApiKey,
+  MISTRAL_API_KEY_URL,
+  saveMistralApiKey,
+  validateMistralApiKey,
+} from "@/src/mistral/mistral-api";
+import { downloadFrenchVoice } from "@/src/mistral/french-voice";
+import {
   computeSetupReadiness,
   type SetupReadiness,
   type SetupStep,
@@ -75,6 +83,7 @@ export default function OnboardingScreen() {
   const [openAiKeyInput, setOpenAiKeyInput] = useState("");
   const [openAiBusy, setOpenAiBusy] = useState(false);
   const [openAiError, setOpenAiError] = useState<string | null>(null);
+  const [voiceProgress, setVoiceProgress] = useState<number | null>(null);
   const [modelProgress, setModelProgress] = useState<SherpaModelDownloadProgress | null>(null);
   const [modelBusy, setModelBusy] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -138,6 +147,20 @@ export default function OnboardingScreen() {
         if (check?.ok && check.liveModels.length) {
           useUserStore.getState().updatePreferences({ geminiModelId: check.recommendedModel });
         }
+      } else if (useUserStore.getState().preferences.aiProvider === "mistral") {
+        await saveMistralApiKey(validateMistralApiKey(openAiKeyInput));
+        const check = await checkMistralApiKey().catch(() => null);
+        if (check && !check.ok && check.reason === "invalid_key") {
+          await clearMistralApiKey();
+          throw new Error(t("ai.mistralKeyInvalid"));
+        }
+        // Mistral replies are spoken by an offline French voice (~64 MB).
+        setVoiceProgress(0);
+        try {
+          await downloadFrenchVoice(useUserStore.getState().preferences.mistralVoiceId, setVoiceProgress);
+        } finally {
+          setVoiceProgress(null);
+        }
       } else {
         await saveOpenAiApiKey(validateOpenAiApiKey(openAiKeyInput));
       }
@@ -152,7 +175,9 @@ export default function OnboardingScreen() {
   }, [goToStep, openAiBusy, openAiKeyInput, refreshReadiness, t]);
 
   const replaceOpenAiKey = useCallback(async () => {
-    if (useUserStore.getState().preferences.aiProvider === "gemini") await clearGeminiApiKey();
+    const provider = useUserStore.getState().preferences.aiProvider;
+    if (provider === "gemini") await clearGeminiApiKey();
+    else if (provider === "mistral") await clearMistralApiKey();
     else await clearOpenAiApiKey();
     await refreshReadiness();
     setOpenAiError(null);
@@ -257,21 +282,27 @@ export default function OnboardingScreen() {
             <Section title={t("ai.title")}>
               <Text style={styles.help}>{t("ai.help")}</Text>
               <View style={styles.actions}>
-                {(["gemini", "openai"] as AiProvider[]).map((provider) => aiProvider === provider
-                  ? <PrimaryButton key={provider} label={`✓ ${t(provider === "gemini" ? "ai.gemini" : "ai.openai")}`} onPress={() => undefined} />
-                  : <SecondaryButton key={provider} label={t(provider === "gemini" ? "ai.gemini" : "ai.openai")} onPress={() => selectAiProvider(provider)} />)}
+                {(["gemini", "mistral", "openai"] as AiProvider[]).map((provider) => {
+                  const label = t(provider === "gemini" ? "ai.gemini" : provider === "mistral" ? "ai.mistral" : "ai.openai");
+                  return aiProvider === provider
+                    ? <PrimaryButton key={provider} label={`✓ ${label}`} onPress={() => undefined} />
+                    : <SecondaryButton key={provider} label={label} onPress={() => selectAiProvider(provider)} />;
+                })}
               </View>
-              <Text style={styles.help}>{aiProvider === "gemini" ? t("ai.geminiHelp") : t("onboarding.apiHelp")}</Text>
-              {aiProvider === "gemini" ? (
+              <Text style={styles.help}>{aiProvider === "gemini" ? t("ai.geminiHelp") : aiProvider === "mistral" ? t("ai.mistralHelp") : t("onboarding.apiHelp")}</Text>
+              {aiProvider !== "openai" ? (
                 <View style={styles.actions}>
-                  <SecondaryButton label={t("ai.getGeminiKey")} onPress={() => void Linking.openURL(GEMINI_API_KEY_URL)} />
+                  <SecondaryButton
+                    label={t(aiProvider === "gemini" ? "ai.getGeminiKey" : "ai.getMistralKey")}
+                    onPress={() => void Linking.openURL(aiProvider === "gemini" ? GEMINI_API_KEY_URL : MISTRAL_API_KEY_URL)}
+                  />
                 </View>
               ) : null}
               <StatusRow label={t("onboarding.key")} ready={Boolean(readiness?.openAiKeyConfigured)} readyText={t("onboarding.keySaved")} pendingText={t("onboarding.keyNeeded")} />
               <TextInput
                 value={openAiKeyInput}
                 onChangeText={setOpenAiKeyInput}
-                placeholder={readiness?.openAiKeyConfigured ? t("onboarding.newKey") : aiProvider === "gemini" ? t("ai.geminiKeyPlaceholder") : "OpenAI API key"}
+                placeholder={readiness?.openAiKeyConfigured ? t("onboarding.newKey") : aiProvider === "gemini" ? t("ai.geminiKeyPlaceholder") : aiProvider === "mistral" ? t("ai.mistralKeyPlaceholder") : "OpenAI API key"}
                 placeholderTextColor={looiTheme.muted}
                 secureTextEntry
                 autoCapitalize="none"
@@ -279,6 +310,7 @@ export default function OnboardingScreen() {
                 style={styles.input}
               />
               {openAiError ? <Text style={styles.error}>{openAiError}</Text> : null}
+              {voiceProgress !== null ? <Text style={styles.help}>{t("ai.frenchVoiceDownloading", { percent: Math.round(voiceProgress * 100) })}</Text> : null}
               <View style={styles.actions}>
                 <PrimaryButton label={openAiBusy ? t("onboarding.saving") : readiness?.openAiKeyConfigured ? t("onboarding.replaceKey") : t("onboarding.saveKey")} onPress={saveOpenAiKey} disabled={openAiBusy || !openAiKeyInput.trim()} />
                 {readiness?.openAiKeyConfigured ? <SecondaryButton label={t("onboarding.deleteKey")} onPress={replaceOpenAiKey} /> : null}
@@ -322,7 +354,7 @@ export default function OnboardingScreen() {
 
           {activeStep === "done" ? (
             <Section title={t("onboarding.doneTitle")}>
-              <StatusRow label={aiProvider === "gemini" ? "Gemini" : "OpenAI"} ready={Boolean(readiness?.openAiKeyConfigured)} readyText={t("settings.summary.keySaved")} pendingText={t("onboarding.keyNotConfigured")} />
+              <StatusRow label={aiProvider === "gemini" ? "Gemini" : aiProvider === "mistral" ? "Mistral" : "OpenAI"} ready={Boolean(readiness?.openAiKeyConfigured)} readyText={t("settings.summary.keySaved")} pendingText={t("onboarding.keyNotConfigured")} />
               <StatusRow label={t("onboarding.step.models")} ready={Boolean(readiness?.modelsReady)} readyText={t("onboarding.modelsReady")} pendingText={t("onboarding.modelsNotReady")} />
               <StatusRow label={t("onboarding.microphone")} ready={Boolean(readiness?.microphoneReady)} readyText={t("onboarding.micAllowed")} pendingText={t("onboarding.noAccess")} />
               <StatusRow label={t("settings.summary.robot")} ready={Boolean(readiness?.robotReady)} readyText={t("common.ready")} pendingText={t("onboarding.optional")} neutral />
