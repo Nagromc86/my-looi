@@ -7,6 +7,7 @@ name: Build APK (French)
 # the repository secret LOOI_KEYSTORE_PASSWORD. Every APK is signed with the
 # same key, so new versions install over the previous one and keep LOOI's
 # memory and settings. The build stops if the secret is missing.
+# Offline voice-command models bundled: French + small English (see VOSK_LANGUAGES).
 
 on:
   workflow_dispatch:
