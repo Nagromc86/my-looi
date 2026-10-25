@@ -53,6 +53,14 @@ const ASR_ARCHIVE_URL =
   "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.tar.bz2";
 const KWS_ARCHIVE_URL =
   "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20.tar.bz2";
+// French fork: the needed files are published already extracted, so the phone
+// downloads them directly instead of unpacking 116 MB tar.bz2 archives (very
+// slow in Java bzip2 and it could appear stuck at 5%). The archive path is
+// kept as a fallback.
+export const PREEXTRACTED_MODELS_BASE_URL =
+  "https://github.com/Nagromc86/my-looi/releases/download/voice-models-v1/";
+const KWS_TOKENS_ASSET = "kws-tokens.txt";
+
 const VAD_MODEL_URL =
   "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx";
 
@@ -145,6 +153,10 @@ async function downloadFile(
   );
   try {
     const result = await download.downloadAsync();
+    // An HTTP error page must never be installed as a model file.
+    if (result && (result.status < 200 || result.status >= 300)) {
+      throw new Error(`HTTP ${result.status}: ${label}`);
+    }
     if (!result?.uri || !(await fileReady(result.uri))) {
       throw new Error(`Не удалось скачать: ${label}`);
     }
@@ -225,8 +237,40 @@ async function installExtractedFiles(
   }
 }
 
+async function downloadPreextractedFiles(
+  check: SherpaModelCheck,
+  files: ReadonlyArray<{ asset: string; destination: string }>,
+  stage: "asr-archive" | "kws-archive",
+  label: string,
+  onProgress?: ProgressCallback
+): Promise<void> {
+  await ensureDir(check.absoluteModelDir);
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    await downloadFile(
+      `${PREEXTRACTED_MODELS_BASE_URL}${file.asset}`,
+      `${check.absoluteModelDir}${file.destination}`,
+      (progress) => emit(onProgress, stage, label, (index + progress.progress) / files.length),
+      stage,
+      label
+    );
+  }
+}
+
 async function downloadAsr(check: SherpaModelCheck, onProgress?: ProgressCallback) {
   if (check.ready) return;
+  try {
+    await downloadPreextractedFiles(
+      check,
+      ASR_FILES.map((file) => ({ asset: file.source, destination: file.destination })),
+      "asr-archive",
+      "Whisper Tiny Multilingual",
+      onProgress
+    );
+    return;
+  } catch (error) {
+    console.warn("[SherpaModels] Direct ASR download failed, falling back to the archive:", error);
+  }
   await ensureDir(DOWNLOAD_ROOT);
   await downloadFile(ASR_ARCHIVE_URL, ASR_ARCHIVE_PATH, onProgress, "asr-archive", "Whisper Tiny Multilingual", true);
   await extractArchive(ASR_ARCHIVE_PATH, ASR_EXTRACT_ROOT, "asr-extract", "Whisper Tiny Multilingual", onProgress);
@@ -235,7 +279,25 @@ async function downloadAsr(check: SherpaModelCheck, onProgress?: ProgressCallbac
 
 async function downloadKws(check: SherpaModelCheck, onProgress?: ProgressCallback) {
   const modelFilesMissing = check.missingFiles.some((file) => file !== KWS_KEYWORDS_FILE);
+  let directOk = false;
   if (modelFilesMissing) {
+    try {
+      await downloadPreextractedFiles(
+        check,
+        KWS_FILES.map((file) => ({
+          asset: file.source === DEFAULT_KWS_TOKENS_FILE ? KWS_TOKENS_ASSET : file.source,
+          destination: file.destination,
+        })),
+        "kws-archive",
+        "LOOI",
+        onProgress
+      );
+      directOk = true;
+    } catch (error) {
+      console.warn("[SherpaModels] Direct KWS download failed, falling back to the archive:", error);
+    }
+  }
+  if (modelFilesMissing && !directOk) {
     await ensureDir(DOWNLOAD_ROOT);
     await downloadFile(KWS_ARCHIVE_URL, KWS_ARCHIVE_PATH, onProgress, "kws-archive", "Модель имени LOOI", true);
     await extractArchive(KWS_ARCHIVE_PATH, KWS_EXTRACT_ROOT, "kws-extract", "Модель имени LOOI", onProgress);

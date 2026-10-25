@@ -13,9 +13,21 @@ export const FRENCH_VOICES: ReadonlyArray<{ id: FrenchVoiceId; archive: string; 
   { id: "siwis", archive: "vits-piper-fr_FR-siwis-medium", modelFile: "fr_FR-siwis-medium.onnx", labelFr: "Siwis · voix de femme", labelEn: "Siwis · female voice" },
 ];
 
-export const FRENCH_VOICE_DOWNLOAD_MB = 64;
+export const FRENCH_VOICE_DOWNLOAD_MB = 62;
 const ROOT = `${FileSystem.documentDirectory ?? ""}looi-tts/`;
 const ARCHIVE_URL = (archive: string) => `https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/${archive}.tar.bz2`;
+// Pre-extracted files (see .github/workflows/prepare-voice-models.yml): no
+// slow bzip2 extraction on the phone, and only the 6 small espeak-ng files
+// French needs (724 KB instead of 19 MB).
+const PREEXTRACTED_BASE_URL = "https://github.com/Nagromc86/my-looi/releases/download/voice-models-v1/";
+const ESPEAK_FILES: ReadonlyArray<{ asset: string; path: string }> = [
+  { asset: "espeak-phondata", path: "espeak-ng-data/phondata" },
+  { asset: "espeak-phonindex", path: "espeak-ng-data/phonindex" },
+  { asset: "espeak-phontab", path: "espeak-ng-data/phontab" },
+  { asset: "espeak-intonations", path: "espeak-ng-data/intonations" },
+  { asset: "espeak-fr_dict", path: "espeak-ng-data/fr_dict" },
+  { asset: "espeak-lang-roa-fr", path: "espeak-ng-data/lang/roa/fr" },
+];
 
 function voice(id: FrenchVoiceId) {
   return FRENCH_VOICES.find((item) => item.id === id) ?? FRENCH_VOICES[0];
@@ -25,36 +37,75 @@ function voiceDir(id: FrenchVoiceId): string {
   return `${ROOT}${voice(id).archive}/`;
 }
 
+async function fileSize(uri: string): Promise<number> {
+  const info = await FileSystem.getInfoAsync(uri);
+  return info.exists ? Number((info as any).size ?? 0) : 0;
+}
+
 export async function isFrenchVoiceInstalled(id: FrenchVoiceId): Promise<boolean> {
   const dir = voiceDir(id);
-  const [model, tokens, data] = await Promise.all([
-    FileSystem.getInfoAsync(`${dir}${voice(id).modelFile}`),
-    FileSystem.getInfoAsync(`${dir}tokens.txt`),
-    FileSystem.getInfoAsync(`${dir}espeak-ng-data`),
+  const [model, tokens, phondata, dict] = await Promise.all([
+    fileSize(`${dir}${voice(id).modelFile}`),
+    fileSize(`${dir}tokens.txt`),
+    fileSize(`${dir}espeak-ng-data/phondata`),
+    fileSize(`${dir}espeak-ng-data/fr_dict`),
   ]);
-  return Boolean(model.exists && (model as any).size > 1_000_000 && tokens.exists && data.exists);
+  return model > 1_000_000 && tokens > 100 && phondata > 100_000 && dict > 10_000;
+}
+
+async function downloadTo(url: string, destination: string, onProgress?: (fraction: number) => void): Promise<void> {
+  await FileSystem.makeDirectoryAsync(destination.slice(0, destination.lastIndexOf("/") + 1), { intermediates: true }).catch(() => undefined);
+  const partial = `${destination}.part`;
+  await FileSystem.deleteAsync(partial, { idempotent: true });
+  const download = FileSystem.createDownloadResumable(url, partial, {}, (progress) => {
+    if (progress.totalBytesExpectedToWrite > 0) onProgress?.(progress.totalBytesWritten / progress.totalBytesExpectedToWrite);
+  });
+  const result = await download.downloadAsync();
+  if (!result || result.status < 200 || result.status >= 300) {
+    await FileSystem.deleteAsync(partial, { idempotent: true }).catch(() => undefined);
+    throw new Error(`HTTP ${result?.status ?? "?"} for ${url.slice(url.lastIndexOf("/") + 1)}`);
+  }
+  await FileSystem.deleteAsync(destination, { idempotent: true });
+  await FileSystem.moveAsync({ from: partial, to: destination });
+}
+
+async function downloadPreextracted(id: FrenchVoiceId, onProgress?: (fraction: number) => void): Promise<void> {
+  const dir = voiceDir(id);
+  const { modelFile } = voice(id);
+  // The model is ~60 MB; everything else is tiny.
+  await downloadTo(`${PREEXTRACTED_BASE_URL}${modelFile}`, `${dir}${modelFile}`, (f) => onProgress?.(0.95 * f));
+  await downloadTo(`${PREEXTRACTED_BASE_URL}${id}-tokens.txt`, `${dir}tokens.txt`);
+  for (let i = 0; i < ESPEAK_FILES.length; i += 1) {
+    await downloadTo(`${PREEXTRACTED_BASE_URL}${ESPEAK_FILES[i].asset}`, `${dir}${ESPEAK_FILES[i].path}`);
+    onProgress?.(0.95 + 0.05 * ((i + 1) / ESPEAK_FILES.length));
+  }
+}
+
+async function downloadArchive(id: FrenchVoiceId, onProgress?: (fraction: number) => void): Promise<void> {
+  const { archive } = voice(id);
+  const archivePath = `${FileSystem.cacheDirectory ?? ""}${archive}.tar.bz2`;
+  await downloadTo(ARCHIVE_URL(archive), archivePath, (f) => onProgress?.(0.9 * f));
+  await FileSystem.deleteAsync(voiceDir(id), { idempotent: true });
+  const extracted = await SherpaOnnx.Archive.extractTarBz2(archivePath, ROOT);
+  await FileSystem.deleteAsync(archivePath, { idempotent: true }).catch(() => undefined);
+  if (!extracted.success) throw new Error(extracted.message || "Voice extraction failed");
 }
 
 let downloadPromise: Promise<void> | null = null;
 
-/** Downloads (~64 MB) and installs one French voice. */
+/** Downloads (~62 MB) and installs one French voice. */
 export function downloadFrenchVoice(id: FrenchVoiceId, onProgress?: (fraction: number) => void): Promise<void> {
   if (downloadPromise) return downloadPromise;
   downloadPromise = (async () => {
     if (await isFrenchVoiceInstalled(id)) return;
-    const { archive } = voice(id);
-    const archivePath = `${FileSystem.cacheDirectory ?? ""}${archive}.tar.bz2`;
     await FileSystem.makeDirectoryAsync(ROOT, { intermediates: true }).catch(() => undefined);
-    const download = FileSystem.createDownloadResumable(ARCHIVE_URL(archive), archivePath, {}, (progress) => {
-      if (progress.totalBytesExpectedToWrite > 0) onProgress?.(0.9 * (progress.totalBytesWritten / progress.totalBytesExpectedToWrite));
-    });
-    const result = await download.downloadAsync();
-    if (!result || result.status < 200 || result.status >= 300) throw new Error(`Voice download failed (HTTP ${result?.status ?? "?"})`);
-    await FileSystem.deleteAsync(voiceDir(id), { idempotent: true });
-    const extracted = await SherpaOnnx.Archive.extractTarBz2(archivePath, ROOT);
-    await FileSystem.deleteAsync(archivePath, { idempotent: true }).catch(() => undefined);
-    if (!extracted.success) throw new Error(extracted.message || "Voice extraction failed");
-    if (!(await isFrenchVoiceInstalled(id))) throw new Error("Voice files missing after extraction");
+    try {
+      await downloadPreextracted(id, onProgress);
+    } catch (error) {
+      console.warn("[FrenchVoice] Direct download failed, falling back to the archive:", error);
+      await downloadArchive(id, onProgress);
+    }
+    if (!(await isFrenchVoiceInstalled(id))) throw new Error("Voice files missing after download");
     onProgress?.(1);
   })().finally(() => { downloadPromise = null; });
   return downloadPromise;
