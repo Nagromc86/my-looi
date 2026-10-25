@@ -1,0 +1,58 @@
+name: Prepare voice models
+
+# Extracts, once on GitHub, the few files My LOOI needs from the large
+# sherpa-onnx .tar.bz2 archives and publishes them as plain files in the
+# "voice-models-v1" release. The phone then downloads only those files:
+# no slow bzip2 extraction on the device, and less to download.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/prepare-voice-models.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Download and extract
+        run: |
+          set -euo pipefail
+          mkdir -p work out && cd work
+          base=https://github.com/k2-fsa/sherpa-onnx/releases/download
+          curl -fsSL --retry 4 -o whisper.tar.bz2 "$base/asr-models/sherpa-onnx-whisper-tiny.tar.bz2"
+          curl -fsSL --retry 4 -o kws.tar.bz2 "$base/kws-models/sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20.tar.bz2"
+          curl -fsSL --retry 4 -o tom.tar.bz2 "$base/tts-models/vits-piper-fr_FR-tom-medium.tar.bz2"
+          curl -fsSL --retry 4 -o siwis.tar.bz2 "$base/tts-models/vits-piper-fr_FR-siwis-medium.tar.bz2"
+          for a in whisper kws tom siwis; do mkdir -p $a && tar xjf $a.tar.bz2 -C $a; done
+          pick() { f=$(find "$1" -type f -path "*$2" | head -1); test -n "$f" || { echo "missing $2 in $1" >&2; exit 1; }; cp "$f" "../out/$3"; }
+          # Whisper tiny (multilingual, int8) for local speech recognition
+          pick whisper tiny-encoder.int8.onnx tiny-encoder.int8.onnx
+          pick whisper tiny-decoder.int8.onnx tiny-decoder.int8.onnx
+          pick whisper tiny-tokens.txt tiny-tokens.txt
+          # Keyword spotting ("LOOI" wake name)
+          pick kws encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx encoder-epoch-13-avg-2-chunk-16-left-64.int8.onnx
+          pick kws decoder-epoch-13-avg-2-chunk-16-left-64.onnx decoder-epoch-13-avg-2-chunk-16-left-64.onnx
+          pick kws joiner-epoch-13-avg-2-chunk-16-left-64.int8.onnx joiner-epoch-13-avg-2-chunk-16-left-64.int8.onnx
+          pick kws /tokens.txt kws-tokens.txt
+          # Offline French voices + the only espeak-ng files French needs
+          pick tom fr_FR-tom-medium.onnx fr_FR-tom-medium.onnx
+          pick tom /tokens.txt tom-tokens.txt
+          pick siwis fr_FR-siwis-medium.onnx fr_FR-siwis-medium.onnx
+          pick siwis /tokens.txt siwis-tokens.txt
+          for f in phondata phonindex phontab intonations fr_dict; do pick tom "espeak-ng-data/$f" "espeak-$f"; done
+          pick tom espeak-ng-data/lang/roa/fr espeak-lang-roa-fr
+          cd ../out && ls -la && sha256sum * > SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: voice-models-v1
+          name: Voice models v1 (pre-extracted)
+          body: Fichiers de modèles vocaux déjà décompressés, téléchargés directement par l'app (pas de décompression sur le téléphone).
+          files: out/*
+          make_latest: false
